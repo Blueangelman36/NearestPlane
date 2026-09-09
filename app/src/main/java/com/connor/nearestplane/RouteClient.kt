@@ -70,8 +70,27 @@ object AdsbdbClient {
     private const val TIMEOUT_MS = 10_000
     private const val NONE = "__none__"
 
+    private const val AC = "ac:"
+    private const val RT = "rt:"
+
     /** Airframes are permanent; routes go stale, so they carry a timestamp. */
     private const val ROUTE_TTL_MS = 6 * 60 * 60 * 1000L
+
+    /**
+     * A *miss* expires even for an airframe. adsbdb's database grows, so a hex
+     * looked up the week before it was catalogued would otherwise stay blank
+     * for the life of the install.
+     */
+    private const val MISS_TTL_MS = 30L * 24 * 60 * 60 * 1000L
+
+    /**
+     * The cache is a preferences file, and DataStore loads all of it on every
+     * read. You see a different aircraft most refreshes, so left alone this
+     * grows without limit for as long as the app is installed — slowly, and
+     * then noticeably. Evicting the oldest entries costs one re-fetch each.
+     */
+    private const val MAX_ENTRIES = 500
+    private const val EVICT_TO = 400
 
     suspend fun lookup(context: Context, hex: String, callsign: String?): AdsbdbResult {
         val hexKey = hex.trim().lowercase()
@@ -164,33 +183,46 @@ object AdsbdbClient {
     }
 
     // ---- cache: pipe-delimited, to avoid a serialization dependency ----
+    //
+    // Every value now starts with the epoch millis it was written at, so the
+    // eviction pass can age any entry without knowing which kind it is.
+
+    private fun key(prefix: String, id: String) = stringPreferencesKey("$prefix$id")
+
+    private fun stampOf(raw: String?): Long = raw?.substringBefore("|")?.toLongOrNull() ?: 0L
 
     private suspend fun readAircraft(context: Context, hex: String): AircraftInfo? = runCatching {
-        val raw = context.cacheStore.data.first()[stringPreferencesKey("ac:$hex")] ?: return null
-        if (raw == NONE) return AircraftInfo(null, null, NONE, null, null)
+        val raw = context.cacheStore.data.first()[key(AC, hex)] ?: return null
         val f = raw.split("|")
-        if (f.size < 5) return null
+        // Entries written before the timestamp existed parse as unreadable,
+        // which re-fetches them once and rewrites them in the new shape.
+        val stamp = f.getOrNull(0)?.toLongOrNull() ?: return null
+        if (f.getOrNull(1) == NONE) {
+            return if (System.currentTimeMillis() - stamp > MISS_TTL_MS) null
+            else AircraftInfo(null, null, NONE, null, null)
+        }
+        if (f.size < 6) return null
         AircraftInfo(
-            f[0].ifBlank { null }, f[1].ifBlank { null }, f[2].ifBlank { null },
-            f[3].ifBlank { null }, f[4].ifBlank { null }
+            f[1].ifBlank { null }, f[2].ifBlank { null }, f[3].ifBlank { null },
+            f[4].ifBlank { null }, f[5].ifBlank { null }
         )
     }.getOrNull()
 
     private suspend fun writeAircraft(context: Context, hex: String, a: AircraftInfo?) {
-        runCatching {
-            context.cacheStore.edit {
-                it[stringPreferencesKey("ac:$hex")] = a?.let { v ->
-                    listOf(
-                        v.manufacturer.orEmpty(), v.model.orEmpty(), v.icaoType.orEmpty(),
-                        v.registration.orEmpty(), v.owner.orEmpty()
-                    ).joinToString("|")
-                } ?: NONE
-            }
-        }
+        val now = System.currentTimeMillis()
+        put(
+            context, key(AC, hex),
+            a?.let { v ->
+                listOf(
+                    now.toString(), v.manufacturer.orEmpty(), v.model.orEmpty(),
+                    v.icaoType.orEmpty(), v.registration.orEmpty(), v.owner.orEmpty()
+                ).joinToString("|")
+            } ?: "$now|$NONE"
+        )
     }
 
     private suspend fun readRoute(context: Context, callsign: String): FlightRoute? = runCatching {
-        val raw = context.cacheStore.data.first()[stringPreferencesKey("rt:$callsign")] ?: return null
+        val raw = context.cacheStore.data.first()[key(RT, callsign)] ?: return null
         val f = raw.split("|")
         val stamp = f.getOrNull(0)?.toLongOrNull() ?: return null
         if (System.currentTimeMillis() - stamp > ROUTE_TTL_MS) return null   // expired
@@ -207,16 +239,38 @@ object AdsbdbClient {
     }.getOrNull()
 
     private suspend fun writeRoute(context: Context, callsign: String, r: FlightRoute?) {
+        fun enc(a: Airport?) = a?.let {
+            "${it.icao};${it.iata.orEmpty()};${it.municipality.orEmpty()};${it.lat};${it.lon}"
+        }.orEmpty()
+        val now = System.currentTimeMillis()
+        put(
+            context, key(RT, callsign),
+            if (r == null) "$now|$NONE"
+            else "$now|${r.airline.orEmpty()}|${enc(r.origin)}|${enc(r.destination)}"
+        )
+    }
+
+    /**
+     * One write, plus an eviction pass when the file has grown past its cap.
+     * Both happen inside a single edit, so the cache can never be left holding
+     * more than it is allowed to.
+     */
+    private suspend fun put(context: Context, k: Preferences.Key<String>, value: String) {
         runCatching {
-            fun enc(a: Airport?) = a?.let {
-                "${it.icao};${it.iata.orEmpty()};${it.municipality.orEmpty()};${it.lat};${it.lon}"
-            }.orEmpty()
-            context.cacheStore.edit {
-                it[stringPreferencesKey("rt:$callsign")] = if (r == null) {
-                    "${System.currentTimeMillis()}|$NONE||"
-                } else {
-                    "${System.currentTimeMillis()}|${r.airline.orEmpty()}|${enc(r.origin)}|${enc(r.destination)}"
-                }
+            context.cacheStore.edit { prefs ->
+                prefs[k] = value
+
+                val cached = prefs.asMap().keys
+                    .map { it.name }
+                    .filter { it.startsWith(AC) || it.startsWith(RT) }
+                if (cached.size <= MAX_ENTRIES) return@edit
+
+                // Oldest first, dropped in a batch rather than one per write:
+                // this then runs once every hundred new aircraft, not always.
+                cached
+                    .sortedBy { stampOf(prefs[stringPreferencesKey(it)]) }
+                    .take(cached.size - EVICT_TO)
+                    .forEach { prefs.remove(stringPreferencesKey(it)) }
             }
         }
     }

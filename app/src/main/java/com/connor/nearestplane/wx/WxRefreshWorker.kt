@@ -61,7 +61,7 @@ class WxRefreshWorker(
                     it[WxState.STATUS] = "empty"
                     it[WxState.STATION] = "No station"
                     it[WxState.SUMMARY] = "Nothing reporting within ~45 nm"
-                    it[WxState.STALE_NOTE] = ""
+                    it[WxState.STALE_NOTE] = fix.staleNote.orEmpty()
                     it[WxState.UPDATED_AT] = System.currentTimeMillis()
                 }
                 Diagnostics.noteOk(context, "weather")
@@ -84,7 +84,9 @@ class WxRefreshWorker(
                 p[WxState.DECODED_METAR] = metar.decoded
                 p[WxState.RAW_TAF] = taf?.raw.orEmpty()
                 p[WxState.DECODED_TAF] = taf?.let { formatTaf(it) }.orEmpty()
-                p[WxState.STALE_NOTE] = ""
+                // "Nearest station" is only true relative to where you are, so
+                // an old position quietly undermines the whole tile.
+                p[WxState.STALE_NOTE] = fix.staleNote.orEmpty()
                 p[WxState.UPDATED_AT] = System.currentTimeMillis()
             }
             Diagnostics.noteOk(context, "weather")

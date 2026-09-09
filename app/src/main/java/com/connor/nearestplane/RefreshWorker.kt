@@ -72,7 +72,7 @@ class RefreshWorker(
                 it[WidgetState.POSITION] = "Nothing within $RADIUS_NM nm"
                 it[WidgetState.DETAIL] = ""
                 it[WidgetState.EMERGENCY] = ""
-                it[WidgetState.STALE_NOTE] = ""
+                it[WidgetState.STALE_NOTE] = fix.staleNote.orEmpty()
                 it[WidgetState.UPDATED_AT] = System.currentTimeMillis()
             }
             Diagnostics.noteOk(context, "plane")
@@ -120,7 +120,9 @@ class RefreshWorker(
             p[WidgetState.POSITION] = plane.positionLine
             p[WidgetState.DETAIL] = plane.detail
             p[WidgetState.EMERGENCY] = plane.emergency.orEmpty()
-            p[WidgetState.STALE_NOTE] = ""
+            // An old position is worth saying out loud: the distance and bearing
+            // are measured from it, and nothing else on the tile hints at that.
+            p[WidgetState.STALE_NOTE] = fix.staleNote.orEmpty()
             p[WidgetState.UPDATED_AT] = System.currentTimeMillis()
         }
         Diagnostics.noteOk(context, "plane")

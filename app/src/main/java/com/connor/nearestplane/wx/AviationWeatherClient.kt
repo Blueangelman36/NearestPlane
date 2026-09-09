@@ -26,29 +26,65 @@ object AviationWeatherClient {
      * Finds the closest reporting station by pulling every METAR in a box
      * around you, then sorting by great-circle distance.
      *
-     * [boxDeg] of 0.75 is roughly a 45 nm half-width — wide enough to catch a
-     * station almost anywhere in the US, narrow enough that the response
-     * stays small.
+     * [boxDeg] of 0.75 is a 45 nm half-width — wide enough to catch a station
+     * almost anywhere in the US, narrow enough that the response stays small.
      */
     suspend fun nearestMetar(
         lat: Double,
         lon: Double,
         boxDeg: Double = 0.75
     ): Metar? = withContext(Dispatchers.IO) {
-        val bbox = "%.3f,%.3f,%.3f,%.3f".format(
-            Locale.US, lat - boxDeg, lon - boxDeg, lat + boxDeg, lon + boxDeg
-        )
-        val body = get("$BASE/metar?bbox=$bbox&format=json&hours=3")
-        val arr = JSONArray(body)
-
-        (0 until arr.length())
-            .map { arr.getJSONObject(it) }
-            .mapNotNull { parseMetar(it, lat, lon) }
+        boxesAround(lat, lon, boxDeg)
+            .flatMap { bbox ->
+                val arr = JSONArray(get("$BASE/metar?bbox=$bbox&format=json&hours=3"))
+                (0 until arr.length()).mapNotNull { parseMetar(arr.getJSONObject(it), lat, lon) }
+            }
             // Several hours of reports come back — keep the newest per station.
             .groupBy { it.stationId }
             .mapNotNull { (_, reports) -> reports.maxByOrNull { it.observedEpoch ?: 0L } }
             .minByOrNull { it.distanceNm ?: Double.MAX_VALUE }
     }
+
+    /**
+     * The API wants minLat,minLon,maxLat,maxLon. Three things make that more
+     * than subtraction:
+     *
+     *  - **A degree of longitude shrinks as you go north.** At 45°N, 0.75° of
+     *    longitude is 32 nm, not 45; in Fairbanks it's 22; in Utqiagvik it's
+     *    15. The box has to widen to stay square in nautical miles, which is
+     *    what "45 nm" was supposed to mean. Without this the search quietly
+     *    narrows the further from the equator you are — exactly where stations
+     *    are sparsest and you most need the reach.
+     *  - **Latitude has to stop at the poles.**
+     *  - **Longitude wraps.** A box crossing the antimeridian is two boxes.
+     *    Sent unwrapped, minLon > maxLon asks for the whole planet the long
+     *    way round, and the response is either empty or enormous.
+     */
+    private fun boxesAround(lat: Double, lon: Double, boxDeg: Double): List<String> {
+        val minLat = (lat - boxDeg).coerceAtLeast(-90.0)
+        val maxLat = (lat + boxDeg).coerceAtMost(90.0)
+
+        // 1/cos runs away at the poles, so the widening is capped at ~6.7x.
+        val lonHalf = boxDeg / cos(Math.toRadians(lat)).coerceAtLeast(0.15)
+        if (lonHalf >= 180.0) return listOf(box(minLat, -180.0, maxLat, 180.0))
+
+        val minLon = lon - lonHalf
+        val maxLon = lon + lonHalf
+        return when {
+            minLon < -180.0 -> listOf(
+                box(minLat, minLon + 360.0, maxLat, 180.0),
+                box(minLat, -180.0, maxLat, maxLon)
+            )
+            maxLon > 180.0 -> listOf(
+                box(minLat, minLon, maxLat, 180.0),
+                box(minLat, -180.0, maxLat, maxLon - 360.0)
+            )
+            else -> listOf(box(minLat, minLon, maxLat, maxLon))
+        }
+    }
+
+    private fun box(minLat: Double, minLon: Double, maxLat: Double, maxLon: Double): String =
+        "%.3f,%.3f,%.3f,%.3f".format(Locale.US, minLat, minLon, maxLat, maxLon)
 
     suspend fun taf(stationId: String): Taf? = withContext(Dispatchers.IO) {
         val body = get("$BASE/taf?ids=$stationId&format=json")

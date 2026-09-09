@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -33,6 +34,8 @@ enum class WidgetTextScale(val label: String, val factor: Float) {
     LARGE("Large", 1.15f),
     XLARGE("Extra large", 1.3f)
 }
+
+data class CachedPosition(val lat: Double, val lon: Double, val ageMinutes: Long?)
 
 private val Context.settingsStore: DataStore<Preferences> by preferencesDataStore("app_settings")
 
@@ -85,18 +88,29 @@ object AppSettings {
 
     private val LAST_LAT = doublePreferencesKey("last_lat")
     private val LAST_LON = doublePreferencesKey("last_lon")
+    private val LAST_FIX_AT = longPreferencesKey("last_fix_at")
 
-    suspend fun saveLastPosition(context: Context, lat: Double, lon: Double) {
+    /** [fixTimeMs] is when the fix was taken, which is not when it was saved. */
+    suspend fun saveLastPosition(context: Context, lat: Double, lon: Double, fixTimeMs: Long) {
         context.settingsStore.edit {
             it[LAST_LAT] = lat
             it[LAST_LON] = lon
+            it[LAST_FIX_AT] = if (fixTimeMs > 0L) fixTimeMs else System.currentTimeMillis()
         }
     }
 
-    suspend fun lastPosition(context: Context): Pair<Double, Double>? = runCatching {
+    suspend fun lastPosition(context: Context): CachedPosition? = runCatching {
         val prefs = context.settingsStore.data.first()
-        val lat = prefs[LAST_LAT]
-        val lon = prefs[LAST_LON]
-        if (lat != null && lon != null) lat to lon else null
+        val lat = prefs[LAST_LAT] ?: return@runCatching null
+        val lon = prefs[LAST_LON] ?: return@runCatching null
+        val fixedAt = prefs[LAST_FIX_AT] ?: 0L
+        CachedPosition(
+            lat = lat,
+            lon = lon,
+            // Written before this key existed, so its age is genuinely unknown.
+            ageMinutes = if (fixedAt > 0L) {
+                ((System.currentTimeMillis() - fixedAt) / 60_000L).coerceAtLeast(0L)
+            } else null
+        )
     }.getOrNull()
 }

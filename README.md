@@ -213,7 +213,11 @@ exemption.
 ## How it works
 
 **Location** — `FusedLocationProvider` at balanced-power priority, accepting a
-fix up to 10 minutes old, falling back to last known position. A widget refreshing
+fix up to 10 minutes old, falling back to last known position. Each tier reports
+its own age, and a tile working from anything older than 20 minutes says so in
+the corner: `position 40m old`. The distance and bearing on a tile are measured
+*from you*, so a stale position makes a live-looking tile quietly wrong about
+the one thing nothing else on it hints at. A widget refreshing
 every 15 minutes doesn't need a GPS lock, and city-block accuracy is plenty when
 the nearest plane is miles away.
 
@@ -223,6 +227,12 @@ for less silently gets rounded up. Alongside that, `updatePeriodMillis` in the
 widget XML drives a second trigger through the system's AlarmManager, which
 survives some conditions that defer WorkManager indefinitely. Whichever fires
 first wins — unique-work policies mean a double fire costs one request, not two.
+
+The backup path has a floor of its own: **30 minutes**, and values below it are
+silently rounded up. So for the plane widget the two paths are not equals — the
+alarm fires at half the rate of the job it backs up. It exists for the case
+where WorkManager is being deferred outright, not to double the refresh rate.
+Both widget XML files say so where someone would go to change the number.
 
 Both are re-asserted every time you open the app, so a dropped schedule
 repairs itself.
@@ -234,6 +244,12 @@ slow, you lose the route line and the full type name, never the tile.
 **State** — each widget's data lives in its own Glance preferences store, so
 tiles survive reboots and process death. The background setting is separate,
 in an app-wide DataStore both widgets read.
+
+The adsbdb cache is a third store, and it is **capped at 500 entries**, dropping
+to 400 when it fills. You see a different aircraft most refreshes and DataStore
+loads the whole file on every read, so without a cap this is a file that only
+ever grows, for as long as the app is installed. Eviction is oldest-first and
+costs one re-fetch per dropped entry.
 
 **Aircraft type comes from the airframe database.** The app looks up the
 Mode-S hex against adsbdb, which returns manufacturer and model — a hex maps to
@@ -261,10 +277,12 @@ Three defences, since the data can't be made correct:
    N-number callsign, which is always a one-off flight. Timing estimates are
    suppressed for these too.
 3. **A six-hour cache expiry** on routes, so a recycled callsign gets
-   re-checked rather than sticking to yesterday's answer. Airframe data has no
-   expiry, since it can't change — which is exactly why only a 404 is cached as
-   "unknown". A 429 or a 503 is a transient server problem, and writing that
-   into a cache with no expiry would hide an aircraft's type name permanently.
+   re-checked rather than sticking to yesterday's answer. An airframe *hit* has
+   no expiry, since a hex maps to one aircraft forever — which is exactly why
+   only a 404 is cached as a miss. A 429 or a 503 is a transient server problem,
+   and writing that into a cache with no expiry would hide an aircraft's type
+   name permanently. Misses expire after 30 days regardless, because adsbdb's
+   database grows and a hex catalogued next week shouldn't stay blank.
 
 The check can't catch everything. If the real and claimed destinations happen
 to lie in similar directions, a wrong route passes. Treat any route without a
@@ -303,7 +321,10 @@ you trust it.
 - **Ignore high cruisers** — add `.filter { (it.altitudeFt ?: 0) < 25_000 }` in
   `AdsbClient.nearest` to only surface aircraft actually near you.
 - **Weather search area** — `boxDeg` in `AviationWeatherClient.nearestMetar`.
-  0.75° is about 45 nm; bump it if you're somewhere sparse.
+  0.75° is 45 nm; bump it if you're somewhere sparse. It's a half-width in
+  nautical miles, not in degrees of longitude — `boxesAround` widens the box
+  as you go north to keep it square, since 0.75° east-west is 45 nm at the
+  equator but 22 in Fairbanks.
 - **Always get a TAF** — right now the nearest station wins even if it's a small
   field that doesn't issue one. Filter to stations that returned a TAF if you'd
   rather always have a forecast.

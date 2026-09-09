@@ -1,4 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  updatePeriodMillis is the AlarmManager-driven backup path, and 1800000 (30
+  minutes) is the floor. Anything smaller is silently rounded up by the system,
+  so lowering this number does nothing at all — it just makes the file lie.
+
+  That means the backup fires at half the rate of the 30-minute WorkManager
+  job it backs up. It is a safety net for the case where WorkManager is being
+  deferred entirely, not a second opinion on every refresh. To genuinely
+  refresh more often, change the interval in WxRefreshWorker.schedulePeriodic and accept that
+  15 minutes is that API's own floor.
+-->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/weather_widget_description"
     android:initialLayout="@layout/glance_default_loading_layout"
