@@ -39,17 +39,39 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Build debug APK
-        run: gradle --no-daemon assembleDebug
+      # Without a stable key each run generates its own debug keystore, and the
+      # phone then refuses every update as a signature mismatch — reported as a
+      # bare "App not installed".
+      - name: Restore the signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::warning::No SIGNING_KEYSTORE_BASE64 secret. Falling back to a per-run debug key; this build will NOT install over a previous one."
+            exit 0
+          fi
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/signing.jks"
+          echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/signing.jks" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        env:
+          SIGNING_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+        run: gradle --no-daemon assembleRelease
 
       - name: Name the APK
         id: apk
         run: |
           version=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
           mkdir -p out
-          cp app/build/outputs/apk/debug/app-debug.apk "out/nearest-plane-${version}.apk"
+          # Unsigned only if the fallback above also failed to produce a key.
+          src=app/build/outputs/apk/release/app-release.apk
+          [ -f "$src" ] || src=app/build/outputs/apk/release/app-release-unsigned.apk
+          cp "$src" "out/nearest-plane-${version}.apk"
           echo "path=out/nearest-plane-${version}.apk" >> "$GITHUB_OUTPUT"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
+          # Published so a failed install can be told apart from a bad download.
+          echo "sha=$(sha256sum "out/nearest-plane-${version}.apk" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK as a workflow artifact
         uses: actions/upload-artifact@v4
@@ -65,7 +87,16 @@ jobs:
           files: ${{ steps.apk.outputs.path }}
           generate_release_notes: true
           body: |
-            Debug-signed APK, installable directly on a phone.
+            Release-build APK, self-signed, installable directly on a phone.
 
             **On your phone:** tap the `.apk` below, then allow installs from
             your browser when Android asks. No Android Studio, no USB cable.
+
+            **Upgrading from v1.3 or earlier?** Uninstall the old one first.
+            Everything up to v1.3 was signed with a throwaway key that changed
+            on every build, so Android sees those as a different app and blocks
+            the update. From v1.4 on, one key, and updates install cleanly.
+
+            `SHA-256: ${{ steps.apk.outputs.sha }}`
+            Doesn't match what you downloaded? The download is truncated —
+            that's a broken file, not a broken build.

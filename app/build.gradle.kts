@@ -1,8 +1,27 @@
+import java.io.File
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+/**
+ * A stable signing key, supplied by CI from repository secrets.
+ *
+ * Without one, every build is signed with whatever debug keystore happens to
+ * exist on the machine — and a CI runner is a fresh machine each time, so each
+ * build got a *different* key. Android refuses to install an update whose
+ * signature doesn't match what's already there, which surfaces on the phone as
+ * a bare "App not installed" with no explanation.
+ *
+ * Absent (a fork without the secrets, or a local build) this falls back to the
+ * debug key, which is at least stable per-machine.
+ */
+val signingKeystore: File? = System.getenv("SIGNING_KEYSTORE_PATH")
+    ?.takeIf { it.isNotBlank() }
+    ?.let { File(it) }
+    ?.takeIf { it.exists() }
 
 android {
     namespace = "com.connor.nearestplane"
@@ -12,13 +31,27 @@ android {
         applicationId = "com.connor.nearestplane"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.3"
+        versionCode = 5
+        versionName = "1.4"
+    }
+
+    signingConfigs {
+        if (signingKeystore != null) {
+            create("stable") {
+                storeFile = signingKeystore
+                storePassword = System.getenv("SIGNING_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("SIGNING_KEY_ALIAS") ?: "nearestplane"
+                keyPassword = System.getenv("SIGNING_KEYSTORE_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig =
+                if (signingKeystore != null) signingConfigs.getByName("stable")
+                else signingConfigs.getByName("debug")
         }
     }
 
