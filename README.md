@@ -18,8 +18,8 @@ Both are free to run. No API keys, no accounts, no paid tiers.
 |---|---|---|
 | Source | airplanes.live + adsbdb | NOAA aviationweather.gov |
 | Background refresh | 15 min | 30 min |
-| Tap does | force refresh | open detail screen |
-| Search area | 50 nm radius | ~45 nm box, nearest station wins |
+| Tap does | open detail screen | open detail screen |
+| Search area | 10–100 nm, your choice | ~45 nm box, nearest station wins |
 
 ---
 
@@ -102,7 +102,7 @@ app/src/main/res/values/icon_colors.xml
 app/src/main/res/drawable/ic_launcher_foreground.xml
 app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
 app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
-app/src/main/java/com/connor/nearestplane/*.kt        (13 files)
+app/src/main/java/com/connor/nearestplane/*.kt        (15 files)
 app/src/main/java/com/connor/nearestplane/wx/*.kt     (5 files)
 ```
 
@@ -137,9 +137,11 @@ Developer options, then **Developer options → USB debugging → on**.
 Plug in over USB, accept the RSA fingerprint prompt on the phone, then hit
 **Run** (the green triangle) in Android Studio.
 
-## 6. Grant location
+## 6. Give it a location
 
-The app opens to a setup screen.
+The app opens to a setup screen with two ways to answer "where are you".
+
+### Follow this device
 
 1. Tap **Grant location access** → choose *While using the app*.
 2. Tap **Open app settings** → Permissions → Location → **Allow all the time**.
@@ -148,6 +150,17 @@ Step 2 is not optional and it is not skippable from inside the app. Android 10
 and later refuse to let an app request background location from a dialog — it has
 to be set in Settings by hand. Skip it and the widgets silently stop updating
 whenever the screen is off, which looks exactly like a bug in the code.
+
+### A fixed place
+
+Pick **A fixed place** instead and either type an airport code — `KJFK`, `EGLL`,
+`YSSY`, anything the NOAA station database knows, which is most places with a
+paved runway — or tap **Pin where I am** once.
+
+This needs **no background location permission at all**, which makes the whole
+of step 2 above go away. If you mostly care about what's over your house or your
+home field, this is the better mode, and it's the answer to "why do the widgets
+only update when I open the app".
 
 ## 7. Place the widgets
 
@@ -161,7 +174,36 @@ Each populates within a few seconds of placement.
 
 ## Settings
 
-Open the app any time. Every change redraws all placed tiles immediately.
+Open the app any time. Appearance changes redraw all placed tiles immediately;
+changes to *what* is fetched — location, range, ceiling, temperature units —
+trigger a refresh instead, since a redraw alone would show the old answer.
+
+### Location
+
+**Follow this device** or **A fixed place**. See step 6. The pin survives
+switching back to device mode, so toggling between them doesn't lose it.
+
+### Plane search
+
+**Range** — 10, 25, 50 (default) or 100 nm.
+
+**Ceiling** — Any (default), or below 18,000 / 10,000 / 5,000 ft.
+
+The ceiling is the setting worth understanding. Without one, anybody living
+under an airway gets the same airliner at FL380 forty miles away on every
+refresh: technically the nearest aircraft, of no interest whatsoever. Set a
+ceiling and the tile starts showing what's actually overhead.
+
+Aircraft reporting no altitude at all are kept regardless. An unknown altitude
+isn't evidence of a high one, and dropping them would lose exactly the low, slow
+GA traffic the ceiling exists to surface.
+
+### Temperature
+
+Celsius (default) or Fahrenheit, on the METAR tile only. Celsius goes unmarked
+because it's the aviation convention; Fahrenheit is suffixed, since a bare
+`72/57` reads as an absurd temperature to anyone expecting the other one. Raw
+METARs are always Celsius, and the detail screen shows both regardless.
 
 ### Background
 
@@ -197,6 +239,9 @@ shades disappear.
 Separate buttons for planes and weather, for testing without waiting out the
 background interval.
 
+Tapping either tile also forces a refresh of that tile, on the way to opening
+its detail screen.
+
 ### Diagnostics
 
 Shows last run, last success, and the last error for each worker. Background
@@ -207,6 +252,25 @@ The distinction matters: if **last success** is old but **last run** is recent,
 the fetch is failing. If **last run** itself is hours old, Android isn't
 scheduling the work, and no amount of code fixes that — it needs the battery
 exemption.
+
+---
+
+## The detail screens
+
+Tap either tile.
+
+**Nearest Plane** — the aircraft in full: type, ICAO code, registration, owner,
+Mode-S hex; distance, altitude, ground speed, track, squawk; and the route with
+its origin and destination spelled out. The caveats the tile compresses into a
+`?` are written out here in full, including when a route was found and thrown
+away for contradicting the aircraft's own track. There's a link out to the
+aircraft on globe.airplanes.live.
+
+**Nearest METAR** — raw METAR, decoded METAR, raw TAF, and a period-by-period
+TAF breakdown.
+
+Both fetch fresh rather than reading the tile's cached state — if you've bothered
+to open one, you want current data — and both refresh the tile behind them.
 
 ---
 
@@ -316,10 +380,13 @@ you trust it.
 
 ## Things you might want to change
 
-- **Plane search radius** — `RefreshWorker.RADIUS_NM`. Smaller means fewer
-  "closest plane is a jet at FL380 forty miles away" results.
-- **Ignore high cruisers** — add `.filter { (it.altitudeFt ?: 0) < 25_000 }` in
-  `AdsbClient.nearest` to only surface aircraft actually near you.
+Search radius and altitude ceiling used to live here. They're settings now —
+see **Plane search** above — because they're the two knobs that decide whether
+the tile is interesting, and needing a rebuild to turn them was absurd.
+
+- **More radius or ceiling options** — the `SearchRadius` and `AltitudeCeiling`
+  enums in `AppSettings.kt`. Adding a value is one line and it appears in the
+  settings screen automatically.
 - **Weather search area** — `boxDeg` in `AviationWeatherClient.nearestMetar`.
   0.75° is 45 nm; bump it if you're somewhere sparse. It's a half-width in
   nautical miles, not in degrees of longitude — `boxesAround` widens the box
@@ -363,13 +430,23 @@ from a different UID, so a non-exported receiver is invisible to it.
 **Widget stuck on "Tap to find a plane"** — WorkManager was never scheduled.
 Open the app once; `MainActivity` schedules both workers on launch.
 
-**"Location off" after granting** — you granted foreground only. See step 6.2.
+**"No location set" after granting** — you granted foreground only, and the app
+is in device mode. See step 6, or switch to a fixed place, which needs no
+background permission at all.
 
 **Widgets only update when you open the app** — this is the common one, and
 it's battery optimisation, not a bug in the fetch. Open the app: if background
 refresh is restricted, a card at the top says so with a one-tap fix. Check the
 Diagnostics card too — if "last run" is hours old, the system isn't running the
 job at all, which is a scheduling problem rather than a network one.
+
+If it persists, **A fixed place** sidesteps the location half of this entirely.
+The battery exemption still matters either way — WorkManager has to be allowed
+to run at all — but a pinned position removes the background-location variable
+from the diagnosis.
+
+**"Nothing within 25 nm below 10,000 ft"** — that's your own search settings
+being honest, not a failure. Widen the range or lift the ceiling.
 
 On Samsung and Xiaomi you usually need both: the in-app exemption *and*
 Settings → Apps → Nearest Plane → Battery → **Unrestricted**.
