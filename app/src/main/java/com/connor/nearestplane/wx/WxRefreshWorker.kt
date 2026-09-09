@@ -16,6 +16,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.connor.nearestplane.AppSettings
 import com.connor.nearestplane.Diagnostics
 import com.connor.nearestplane.LocationSource
 import java.util.concurrent.TimeUnit
@@ -42,7 +43,8 @@ class WxRefreshWorker(
         val context = applicationContext
         Diagnostics.noteRun(context, "weather")
 
-        if (!LocationSource.hasPermission(context)) {
+        // Readiness, not permission: a pinned place needs neither.
+        if (!LocationSource.isReady(context)) {
             write(context) { it[WxState.STATUS] = "no_permission" }
             return Result.success()
         }
@@ -75,11 +77,13 @@ class WxRefreshWorker(
                 null
             }
 
+            val units = AppSettings.appearance(context).temperature
+
             write(context) { p ->
                 p[WxState.STATUS] = "ok"
                 p[WxState.STATION] = metar.stationId
                 p[WxState.CATEGORY] = metar.flightCategory
-                p[WxState.SUMMARY] = metar.shortSummary
+                p[WxState.SUMMARY] = metar.shortSummary(units)
                 p[WxState.RAW_METAR] = metar.raw
                 p[WxState.DECODED_METAR] = metar.decoded
                 p[WxState.RAW_TAF] = taf?.raw.orEmpty()

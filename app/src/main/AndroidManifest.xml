@@ -51,6 +51,11 @@
         </receiver>
 
         <activity
+            android:name=".PlaneDetailActivity"
+            android:exported="false"
+            android:label="@string/widget_label" />
+
+        <activity
             android:name=".wx.WeatherDetailActivity"
             android:exported="false"
             android:label="@string/weather_widget_label" />

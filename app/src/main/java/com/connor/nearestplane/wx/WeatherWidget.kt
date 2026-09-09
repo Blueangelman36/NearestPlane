@@ -30,6 +30,7 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.connor.nearestplane.AppSettings
+import com.connor.nearestplane.MainActivity
 import com.connor.nearestplane.WidgetPalette
 import java.util.concurrent.TimeUnit
 
@@ -46,6 +47,11 @@ class WeatherWidget : GlanceAppWidget() {
     private fun Body(prefs: Preferences, look: AppSettings.Appearance) {
         val status = prefs[WxState.STATUS] ?: "never"
 
+        // The detail screen can't help you grant a permission, so when there's
+        // no location at all the tap goes to the place that can.
+        val tap = if (status == "no_permission") actionStartActivity<MainActivity>()
+        else actionStartActivity<WeatherDetailActivity>()
+
         Column(
             modifier = GlanceModifier
                 .fillMaxWidth()
@@ -53,12 +59,12 @@ class WeatherWidget : GlanceAppWidget() {
                 .background(WidgetPalette.background(look))
                 .cornerRadius(16.dp)
                 .padding(horizontal = 12.dp, vertical = 8.dp)
-                .clickable(actionStartActivity<WeatherDetailActivity>())
+                .clickable(tap)
         ) {
             when (status) {
                 "no_permission" -> {
-                    Line("Location off", 15, look, FontWeight.Medium)
-                    Line("Open the app to grant access", 12, look, muted = true)
+                    Line("No location set", 15, look, FontWeight.Medium)
+                    Line("Tap to set it up", 12, look, muted = true)
                 }
                 "never" -> {
                     Line("Tap for airport weather", 15, look, FontWeight.Medium)

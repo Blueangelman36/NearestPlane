@@ -1,5 +1,6 @@
 package com.connor.nearestplane.wx
 
+import com.connor.nearestplane.TemperatureUnit
 import kotlin.math.roundToInt
 import java.util.Locale
 
@@ -43,15 +44,23 @@ data class Metar(
         }
 
     /** One line for the widget: "310@12G20 · 10sm · BKN035 · 22/14" */
-    val shortSummary: String
-        get() = buildList {
-            add(windText(windDirDeg, windKts, gustKts))
-            visibilitySm?.let { add(visText(it)) }
-            add(cloudsShort())
-            if (tempC != null && dewpointC != null) {
-                add("${tempC.roundToInt()}/${dewpointC.roundToInt()}")
-            }
-        }.filter { it.isNotBlank() }.joinToString(" · ")
+    fun shortSummary(unit: TemperatureUnit = TemperatureUnit.CELSIUS): String = buildList {
+        add(windText(windDirDeg, windKts, gustKts))
+        visibilitySm?.let { add(visText(it)) }
+        add(cloudsShort())
+        if (tempC != null && dewpointC != null) {
+            // Celsius is the aviation convention and goes unmarked. Fahrenheit
+            // is not, and a bare "72/57" would read as an absurd temperature.
+            add(
+                when (unit) {
+                    TemperatureUnit.CELSIUS ->
+                        "${tempC.roundToInt()}/${dewpointC.roundToInt()}"
+                    TemperatureUnit.FAHRENHEIT ->
+                        "${cToF(tempC)}/${cToF(dewpointC)}°F"
+                }
+            )
+        }
+    }.filter { it.isNotBlank() }.joinToString(" · ")
 
     private fun cloudsShort(): String {
         if (clouds.isEmpty()) return ""

@@ -9,11 +9,9 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
-import androidx.glance.action.ActionParameters
+import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
-import androidx.glance.appwidget.action.ActionCallback
-import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
@@ -45,6 +43,13 @@ class NearestPlaneWidget : GlanceAppWidget() {
     private fun Body(prefs: Preferences, look: AppSettings.Appearance) {
         val status = prefs[WidgetState.STATUS] ?: "never"
 
+        // A tile that says "open the app" and then doesn't when tapped is worse
+        // than one that says nothing. Everywhere else, tap opens the detail
+        // screen, which also kicks a refresh of the tile behind it — so this
+        // still forces a refresh, it just shows you something while it works.
+        val tap = if (status == "no_permission") actionStartActivity<MainActivity>()
+        else actionStartActivity<PlaneDetailActivity>()
+
         // wrapContentHeight rather than fillMaxSize: the tile shrinks to its
         // content instead of padding out to the full cell.
         Column(
@@ -54,12 +59,12 @@ class NearestPlaneWidget : GlanceAppWidget() {
                 .background(WidgetPalette.background(look))
                 .cornerRadius(16.dp)
                 .padding(horizontal = 12.dp, vertical = 8.dp)
-                .clickable(actionRunCallback<RefreshAction>())
+                .clickable(tap)
         ) {
             when (status) {
                 "no_permission" -> {
-                    Line("Location off", 16, look, FontWeight.Medium)
-                    Line("Open the app to grant access", 12, look, muted = true)
+                    Line("No location set", 16, look, FontWeight.Medium)
+                    Line("Tap to set it up", 12, look, muted = true)
                 }
                 "never" -> {
                     Line("Tap to find a plane", 16, look, FontWeight.Medium)
@@ -152,16 +157,5 @@ class NearestPlaneWidget : GlanceAppWidget() {
             minutes < 60 -> "${minutes}m ago"
             else -> "${minutes / 60}h ago"
         }
-    }
-}
-
-/** Tapping the tile queues an immediate refresh. */
-class RefreshAction : ActionCallback {
-    override suspend fun onAction(
-        context: Context,
-        glanceId: GlanceId,
-        parameters: ActionParameters
-    ) {
-        RefreshWorker.refreshNow(context)
     }
 }

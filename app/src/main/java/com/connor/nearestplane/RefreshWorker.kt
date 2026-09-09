@@ -25,7 +25,8 @@ class RefreshWorker(
         val context = applicationContext
         Diagnostics.noteRun(context, "plane")
 
-        if (!LocationSource.hasPermission(context)) {
+        // Readiness, not permission: a pinned place needs neither.
+        if (!LocationSource.isReady(context)) {
             write(context) { it[WidgetState.STATUS] = "no_permission" }
             return Result.success()
         }
@@ -50,10 +51,17 @@ class RefreshWorker(
             return Result.retry()
         }
 
+        val filter = AppSettings.planeFilter(context)
+
         // Only the aircraft fetch can fail the job. Everything after it is
         // enrichment, and enrichment failing must never cost you the tile.
         val plane = try {
-            AdsbClient.nearest(fix.lat, fix.lon, RADIUS_NM)
+            AdsbClient.nearest(
+                lat = fix.lat,
+                lon = fix.lon,
+                radiusNm = filter.radius.nm,
+                maxAltitudeFt = filter.ceiling.maxFt
+            )
         } catch (e: Exception) {
             val msg = e.message?.take(90) ?: e.javaClass.simpleName
             degrade(context, "offline")
@@ -69,7 +77,10 @@ class RefreshWorker(
                 it[WidgetState.TYPE_NAME] = ""
                 it[WidgetState.ROUTE] = ""
                 it[WidgetState.TIMING] = ""
-                it[WidgetState.POSITION] = "Nothing within $RADIUS_NM nm"
+                it[WidgetState.POSITION] = buildString {
+                    append("Nothing within ${filter.radius.nm} nm")
+                    filter.ceiling.maxFt?.let { append(" ${filter.ceiling.label.lowercase()}") }
+                }
                 it[WidgetState.DETAIL] = ""
                 it[WidgetState.EMERGENCY] = ""
                 it[WidgetState.STALE_NOTE] = fix.staleNote.orEmpty()
@@ -79,44 +90,17 @@ class RefreshWorker(
             return Result.success()
         }
 
-        // Enrichment is fully isolated: a failure here costs detail, not the tile.
-        val extra = try {
-            AdsbdbClient.lookup(context, plane.hex, plane.callsign)
-        } catch (e: Exception) {
-            Diagnostics.noteError(context, "plane", "enrich: ${e.javaClass.simpleName}")
-            AdsbdbResult(null, null)
-        }
-
-        val quality = runCatching {
-            RouteMath.assessRoute(
-                callsign = plane.callsign,
-                planeLat = plane.lat,
-                planeLon = plane.lon,
-                trackDeg = plane.trackDeg,
-                groundSpeedKts = plane.groundSpeedKts,
-                altitudeFt = plane.altitudeFt,
-                destination = extra.route?.destination
-            )
-        }.getOrDefault(RouteQuality.UNCERTAIN)
-
-        val route = extra.route.takeIf { quality != RouteQuality.CONTRADICTED }
-        val routeLine = runCatching { buildRouteLine(route, quality) }.getOrDefault("")
-        val timingLine = if (quality == RouteQuality.GOOD) {
-            runCatching { buildTimingLine(plane, route) }.getOrDefault("")
-        } else ""
-
-        val typeName = extra.aircraft?.fullName ?: plane.typeName
-        val operator: String = extra.route?.airline
-            ?: extra.aircraft?.owner
-            ?: plane.operator.orEmpty()
+        // Shared with the detail screen, so the two can't disagree about a route.
+        val report = PlaneSummary.build(context, plane)
+        report.enrichError?.let { Diagnostics.noteError(context, "plane", "enrich: $it") }
 
         write(context) { p ->
             p[WidgetState.STATUS] = "ok"
             p[WidgetState.TITLE] = plane.label
-            p[WidgetState.AIRLINE] = operator
-            p[WidgetState.TYPE_NAME] = typeName.orEmpty()
-            p[WidgetState.ROUTE] = routeLine
-            p[WidgetState.TIMING] = timingLine
+            p[WidgetState.AIRLINE] = report.operator
+            p[WidgetState.TYPE_NAME] = report.typeName.orEmpty()
+            p[WidgetState.ROUTE] = report.routeLine
+            p[WidgetState.TIMING] = report.timingLine
             p[WidgetState.POSITION] = plane.positionLine
             p[WidgetState.DETAIL] = plane.detail
             p[WidgetState.EMERGENCY] = plane.emergency.orEmpty()
@@ -127,36 +111,6 @@ class RefreshWorker(
         }
         Diagnostics.noteOk(context, "plane")
         return Result.success()
-    }
-
-    private fun buildRouteLine(route: FlightRoute?, quality: RouteQuality): String {
-        val from = route?.origin?.display?.ifBlank { null }
-        val to = route?.destination?.display?.ifBlank { null }
-        val base = when {
-            from != null && to != null -> "$from \u2192 $to"
-            from != null -> "from $from"
-            to != null -> "to $to"
-            else -> return ""
-        }
-        return if (quality == RouteQuality.UNCERTAIN) "$base ?" else base
-    }
-
-    private fun buildTimingLine(plane: Aircraft, route: FlightRoute?): String {
-        if (plane.lat == null || plane.lon == null || route == null) return ""
-        val parts = mutableListOf<String>()
-        route.origin?.let { origin ->
-            RouteMath.minutesSinceDeparture(plane.lat, plane.lon, origin, plane.groundSpeedKts)
-                ?.let { parts.add("~${RouteMath.formatDuration(it)} out") }
-        }
-        route.destination?.let { dest ->
-            RouteMath.minutesRemaining(plane.lat, plane.lon, dest, plane.groundSpeedKts)
-                ?.let { parts.add("~${RouteMath.formatDuration(it)} to go") }
-        }
-        if (route.origin != null && route.destination != null) {
-            RouteMath.progressPercent(plane.lat, plane.lon, route.origin, route.destination)
-                ?.let { parts.add("$it%") }
-        }
-        return parts.joinToString(" · ")
     }
 
     /**
@@ -192,8 +146,6 @@ class RefreshWorker(
     }
 
     companion object {
-        const val RADIUS_NM = 50
-
         private const val PERIODIC_NAME = "nearest-plane-periodic"
         private const val ONE_SHOT_NAME = "nearest-plane-now"
 

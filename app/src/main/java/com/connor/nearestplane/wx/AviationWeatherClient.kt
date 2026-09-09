@@ -12,6 +12,9 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 import java.util.Locale
 
+/** An airport resolved from a code, used to pin a fixed location. */
+data class AirportFix(val id: String, val name: String?, val lat: Double, val lon: Double)
+
 /**
  * NOAA's Aviation Weather Center data API. Free, no key, no rate limit
  * published — but they ask that clients keep the load light, which is why
@@ -85,6 +88,34 @@ object AviationWeatherClient {
 
     private fun box(minLat: Double, minLon: Double, maxLat: Double, maxLon: Double): String =
         "%.3f,%.3f,%.3f,%.3f".format(Locale.US, minLat, minLon, maxLat, maxLon)
+
+    /**
+     * Resolves an airport code to a position, for pinning a fixed location.
+     * Accepts ICAO, IATA or FAA identifiers and works outside the US — EGLL and
+     * YSSY both resolve — because it's the same station database the METARs
+     * come from, not an FAA-only list.
+     */
+    suspend fun airport(code: String): AirportFix? = withContext(Dispatchers.IO) {
+        val clean = code.trim().uppercase().filter { it.isLetterOrDigit() }
+        if (clean.isEmpty()) return@withContext null
+
+        // An unknown code is answered with 204 and an empty body, not an error,
+        // so a blank response here means "no such airport" rather than trouble.
+        val body = get("$BASE/airport?ids=$clean&format=json")
+        if (body.isBlank()) return@withContext null
+
+        val arr = JSONArray(body)
+        if (arr.length() == 0) return@withContext null
+        val o = arr.getJSONObject(0)
+        val lat = o.optDoubleOrNull("lat") ?: return@withContext null
+        val lon = o.optDoubleOrNull("lon") ?: return@withContext null
+        AirportFix(
+            id = o.optString("icaoId", "").ifBlank { clean },
+            name = o.optString("name", "").trim().ifBlank { null },
+            lat = lat,
+            lon = lon
+        )
+    }
 
     suspend fun taf(stationId: String): Taf? = withContext(Dispatchers.IO) {
         val body = get("$BASE/taf?ids=$stationId&format=json")

@@ -35,12 +35,49 @@ enum class WidgetTextScale(val label: String, val factor: Float) {
     XLARGE("Extra large", 1.3f)
 }
 
+/** METARs are always in Celsius; this is only about how the tile reads it back. */
+enum class TemperatureUnit(val label: String) { CELSIUS("°C"), FAHRENHEIT("°F") }
+
+enum class SearchRadius(val label: String, val nm: Int) {
+    NM10("10 nm", 10),
+    NM25("25 nm", 25),
+    NM50("50 nm", 50),
+    NM100("100 nm", 100)
+}
+
+/**
+ * An altitude ceiling is the difference between a widget that shows what's
+ * actually overhead and one that shows an airliner at FL380 forty miles away
+ * every single time. Which of those you want depends entirely on whether you
+ * live under an airway.
+ */
+enum class AltitudeCeiling(val label: String, val maxFt: Int?) {
+    ANY("Any altitude", null),
+    BELOW_18000("Below 18,000 ft", 18_000),
+    BELOW_10000("Below 10,000 ft", 10_000),
+    BELOW_5000("Below 5,000 ft", 5_000)
+}
+
+enum class LocationMode(val label: String, val blurb: String) {
+    DEVICE(
+        "Follow this device",
+        "Uses GPS. Needs \"Allow all the time\" to keep updating with the screen off."
+    ),
+    FIXED(
+        "A fixed place",
+        "A pinned airport or position. No background location permission at all."
+    )
+}
+
+/** A pinned place. [label] is what the settings screen reads back to you. */
+data class FixedLocation(val label: String, val lat: Double, val lon: Double)
+
 data class CachedPosition(val lat: Double, val lon: Double, val ageMinutes: Long?)
 
 private val Context.settingsStore: DataStore<Preferences> by preferencesDataStore("app_settings")
 
 /**
- * App-wide appearance, separate from each widget's own Glance state so that one
+ * App-wide settings, separate from each widget's own Glance state so that one
  * change redraws every placed tile.
  */
 object AppSettings {
@@ -48,29 +85,51 @@ object AppSettings {
     private val BACKGROUND = stringPreferencesKey("widget_background")
     private val TEXT_COLOR = stringPreferencesKey("widget_text_color")
     private val TEXT_SCALE = stringPreferencesKey("widget_text_scale")
+    private val TEMPERATURE = stringPreferencesKey("temperature_unit")
+    private val RADIUS = stringPreferencesKey("search_radius")
+    private val CEILING = stringPreferencesKey("altitude_ceiling")
+    private val LOCATION_MODE = stringPreferencesKey("location_mode")
+    private val PIN_LABEL = stringPreferencesKey("pin_label")
+    private val PIN_LAT = doublePreferencesKey("pin_lat")
+    private val PIN_LON = doublePreferencesKey("pin_lon")
 
     data class Appearance(
         val background: WidgetBackground = WidgetBackground.DYNAMIC,
         val textColor: WidgetTextColor = WidgetTextColor.AUTO,
-        val textScale: WidgetTextScale = WidgetTextScale.NORMAL
+        val textScale: WidgetTextScale = WidgetTextScale.NORMAL,
+        val temperature: TemperatureUnit = TemperatureUnit.CELSIUS
     )
 
-    private fun read(prefs: Preferences) = Appearance(
-        background = enumOr(prefs[BACKGROUND], WidgetBackground.DYNAMIC),
-        textColor = enumOr(prefs[TEXT_COLOR], WidgetTextColor.AUTO),
-        textScale = enumOr(prefs[TEXT_SCALE], WidgetTextScale.NORMAL)
+    /** What the plane widget looks for, as opposed to how it looks. */
+    data class PlaneFilter(
+        val radius: SearchRadius = SearchRadius.NM50,
+        val ceiling: AltitudeCeiling = AltitudeCeiling.ANY
+    )
+
+    private fun readAppearance(p: Preferences) = Appearance(
+        background = enumOr(p[BACKGROUND], WidgetBackground.DYNAMIC),
+        textColor = enumOr(p[TEXT_COLOR], WidgetTextColor.AUTO),
+        textScale = enumOr(p[TEXT_SCALE], WidgetTextScale.NORMAL),
+        temperature = enumOr(p[TEMPERATURE], TemperatureUnit.CELSIUS)
+    )
+
+    private fun readFilter(p: Preferences) = PlaneFilter(
+        radius = enumOr(p[RADIUS], SearchRadius.NM50),
+        ceiling = enumOr(p[CEILING], AltitudeCeiling.ANY)
     )
 
     private inline fun <reified T : Enum<T>> enumOr(name: String?, fallback: T): T =
         runCatching { enumValueOf<T>(name ?: fallback.name) }.getOrDefault(fallback)
 
+    // ---- how the tiles look ----
+
     /** One-shot suspending read, for widgets inside provideGlance. */
     suspend fun appearance(context: Context): Appearance =
-        runCatching { read(context.settingsStore.data.first()) }.getOrDefault(Appearance())
+        runCatching { readAppearance(context.settingsStore.data.first()) }.getOrDefault(Appearance())
 
     /** Observable read, for the settings screen. */
     fun appearanceFlow(context: Context): Flow<Appearance> =
-        context.settingsStore.data.map { read(it) }
+        context.settingsStore.data.map { readAppearance(it) }
 
     suspend fun setBackground(context: Context, v: WidgetBackground) {
         context.settingsStore.edit { it[BACKGROUND] = v.name }
@@ -82,6 +141,68 @@ object AppSettings {
 
     suspend fun setTextScale(context: Context, v: WidgetTextScale) {
         context.settingsStore.edit { it[TEXT_SCALE] = v.name }
+    }
+
+    suspend fun setTemperature(context: Context, v: TemperatureUnit) {
+        context.settingsStore.edit { it[TEMPERATURE] = v.name }
+    }
+
+    // ---- what the plane widget looks for ----
+
+    suspend fun planeFilter(context: Context): PlaneFilter =
+        runCatching { readFilter(context.settingsStore.data.first()) }.getOrDefault(PlaneFilter())
+
+    fun planeFilterFlow(context: Context): Flow<PlaneFilter> =
+        context.settingsStore.data.map { readFilter(it) }
+
+    suspend fun setRadius(context: Context, v: SearchRadius) {
+        context.settingsStore.edit { it[RADIUS] = v.name }
+    }
+
+    suspend fun setCeiling(context: Context, v: AltitudeCeiling) {
+        context.settingsStore.edit { it[CEILING] = v.name }
+    }
+
+    // ---- where "here" is ----
+
+    fun locationModeFlow(context: Context): Flow<LocationMode> =
+        context.settingsStore.data.map { enumOr(it[LOCATION_MODE], LocationMode.DEVICE) }
+
+    suspend fun setLocationMode(context: Context, v: LocationMode) {
+        context.settingsStore.edit { it[LOCATION_MODE] = v.name }
+    }
+
+    /**
+     * The pin as stored, whatever the mode. The settings screen reads this, so
+     * switching to device mode and back doesn't lose the pinned place.
+     */
+    fun pinFlow(context: Context): Flow<FixedLocation?> =
+        context.settingsStore.data.map { readPin(it) }
+
+    /**
+     * The pin *in effect* — null in device mode, so callers that just want a
+     * position can ask for this and ignore the mode entirely.
+     */
+    suspend fun fixedLocation(context: Context): FixedLocation? = runCatching {
+        val p = context.settingsStore.data.first()
+        if (enumOr(p[LOCATION_MODE], LocationMode.DEVICE) != LocationMode.FIXED) null
+        else readPin(p)
+    }.getOrNull()
+
+    private fun readPin(p: Preferences): FixedLocation? {
+        val lat = p[PIN_LAT] ?: return null
+        val lon = p[PIN_LON] ?: return null
+        return FixedLocation(p[PIN_LABEL].orEmpty().ifBlank { "Pinned place" }, lat, lon)
+    }
+
+    /** Pinning somewhere is also the act of choosing fixed mode. */
+    suspend fun savePin(context: Context, label: String, lat: Double, lon: Double) {
+        context.settingsStore.edit {
+            it[PIN_LABEL] = label
+            it[PIN_LAT] = lat
+            it[PIN_LON] = lon
+            it[LOCATION_MODE] = LocationMode.FIXED.name
+        }
     }
 
     // ---- last known position, so a failed GPS read never blanks a widget ----

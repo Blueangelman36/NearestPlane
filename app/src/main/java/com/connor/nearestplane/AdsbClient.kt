@@ -28,12 +28,17 @@ object AdsbClient {
      * Returns the closest airborne aircraft within [radiusNm], or null if the
      * sky is empty. Throws on network or parse failure so the caller can
      * distinguish "nothing up there" from "couldn't reach the network".
+     *
+     * [maxAltitudeFt] drops high cruisers. Without it, anyone living under an
+     * airway gets the same airliner at FL380 forty miles away every refresh,
+     * which is technically the nearest aircraft and of no interest at all.
      */
     suspend fun nearest(
         lat: Double,
         lon: Double,
         radiusNm: Int = 50,
-        includeGround: Boolean = false
+        includeGround: Boolean = false,
+        maxAltitudeFt: Int? = null
     ): Aircraft? = withContext(Dispatchers.IO) {
         val url = URL(
             ENDPOINT.format(
@@ -64,6 +69,10 @@ object AdsbClient {
         (0 until list.length())
             .map { parseAircraft(list.getJSONObject(it)) }
             .filter { includeGround || !it.onGround }
+            // An unreported altitude is not evidence of a high one, and
+            // dropping those would lose exactly the close GA traffic the
+            // ceiling exists to surface.
+            .filter { maxAltitudeFt == null || (it.altitudeFt ?: 0) <= maxAltitudeFt }
             .filter { it.distanceNm != null }
             .minByOrNull { it.distanceNm!! }
     }

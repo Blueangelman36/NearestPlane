@@ -13,8 +13,8 @@ import com.google.android.gms.tasks.Task
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
-/** Which of the three tiers a fix came from, best first. */
-enum class PositionSource { LIVE, LAST_KNOWN, CACHED }
+/** Which tier a position came from, best first. */
+enum class PositionSource { FIXED, LIVE, LAST_KNOWN, CACHED }
 
 data class Position(
     val lat: Double,
@@ -33,6 +33,8 @@ data class Position(
      */
     val staleNote: String?
         get() {
+            // A pinned place isn't a fix and can't go stale.
+            if (source == PositionSource.FIXED) return null
             val age = ageMinutes
                 ?: return if (source == PositionSource.LIVE) null else "old position"
             if (age < 20) return null
@@ -47,8 +49,29 @@ object LocationSource {
             PackageManager.PERMISSION_GRANTED
 
     /**
-     * Three-tier fallback, in order: a current fix, the system's last known
-     * position, then our own cached position from a previous successful run.
+     * Whether the app can produce a position at all. A pinned place counts, and
+     * needs no permission — which is the entire point of fixed mode.
+     */
+    suspend fun isReady(context: Context): Boolean =
+        AppSettings.fixedLocation(context) != null || hasPermission(context)
+
+    /**
+     * The position to work from: a pinned place if there is one, otherwise the
+     * device's own, through a three-tier fallback.
+     */
+    suspend fun current(context: Context): Position? {
+        AppSettings.fixedLocation(context)?.let {
+            return Position(it.lat, it.lon, PositionSource.FIXED, null)
+        }
+        return deviceFix(context)
+    }
+
+    /**
+     * The device's own position, ignoring any pin. Settings calls this directly
+     * so "pin my current location" still works while a stale pin is in effect.
+     *
+     * Three tiers, in order: a current fix, the system's last known position,
+     * then our own cached position from a previous successful run.
      *
      * The third tier is what removes the "no GPS" state. In Doze the fused
      * provider frequently returns null for both live tiers, and there is no
@@ -60,7 +83,7 @@ object LocationSource {
      * from something old rather than presenting it as a live reading.
      */
     @SuppressLint("MissingPermission")
-    suspend fun current(context: Context): Position? {
+    suspend fun deviceFix(context: Context): Position? {
         if (!hasPermission(context)) return null
         val client = LocationServices.getFusedLocationProviderClient(context)
 
