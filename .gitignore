@@ -24,3 +24,6 @@ output.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Signing key — kept locally, never committed
+keystore/

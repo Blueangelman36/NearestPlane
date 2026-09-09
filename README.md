@@ -43,10 +43,25 @@ If you'd rather not tag, the same APK is on the **Actions** tab under the latest
 run, as the `nearest-plane-apk` artifact — though workflow artifacts expire and
 release assets don't.
 
-These are debug-signed builds, which is what makes them installable without a
-keystore. That also means Android treats them as coming from an unknown source,
-hence the prompt. If you later want Play-style signed releases, add a keystore
-as a repository secret and switch the workflow to `assembleRelease`.
+These are release builds, self-signed with one fixed key held in the repository
+secrets (`SIGNING_KEYSTORE_BASE64`, `SIGNING_KEYSTORE_PASSWORD`,
+`SIGNING_KEY_ALIAS`). Android treats a self-signed app as coming from an unknown
+source, hence the prompt.
+
+**The key has to stay the same or updates stop installing.** Android identifies
+an app by its signature, so an APK signed with a different key isn't an update —
+it's a different app that happens to share a package name, and the install is
+refused. Everything up to v1.3 was signed with whatever throwaway debug keystore
+the CI runner generated that run, which is to say a different key every time;
+none of those can be upgraded in place. **Uninstall first if you're coming from
+v1.3 or earlier.** From v1.4 on, updates install over each other normally.
+
+A clone without those secrets still builds — it falls back to the local debug
+key and prints a warning saying what that costs.
+
+GitHub's secrets are write-only, so keep a copy of the keystore somewhere you
+control. Lose it and you can never ship an update that installs over what people
+already have.
 
 ### From source, in Android Studio
 
@@ -422,6 +437,20 @@ the tile is interesting, and needing a rebuild to turn them was absurd.
 ---
 
 ## Troubleshooting
+
+**"App not installed" when sideloading** — nearly always a signature mismatch:
+you already have a copy signed with a different key. Uninstall it and install
+again. Everything before v1.4 was signed with a per-build throwaway key, so any
+two of those releases conflict with each other.
+
+If it's a fresh install and it still fails, check the download rather than the
+build: every release lists the APK's SHA-256, and a mismatch means a truncated
+file. Private-repo asset links can hand a browser an HTML error page with an
+`.apk` name, which the installer reports the same way. Also confirm the app
+you're opening the file *from* — the browser, or Files, or My Files — holds
+"Install unknown apps" permission; it's granted per-app, so allowing Chrome
+doesn't allow the file manager.
+
 
 **The widgets don't appear in the picker** — both receivers need
 `android:exported="true"` in the manifest. The system enumerates widget providers
