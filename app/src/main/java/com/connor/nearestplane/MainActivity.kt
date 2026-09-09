@@ -362,7 +362,8 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                SectionCard("Text size") {
+                SectionCard("Text size and weight") {
+                    Text("Size", fontWeight = FontWeight.Medium)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         WidgetTextScale.entries.forEach { option ->
                             FilterChip(
@@ -377,6 +378,27 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
+                    Text("Weight", fontWeight = FontWeight.Medium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        WidgetTextWeight.entries.forEach { option ->
+                            FilterChip(
+                                selected = look.textWeight == option,
+                                onClick = {
+                                    scope.launch {
+                                        AppSettings.setTextWeight(activity, option)
+                                        redrawWidgets()
+                                    }
+                                },
+                                label = { Text(option.label) }
+                            )
+                        }
+                    }
+                    Text(
+                        "Bold is the default, and it's the other half of legibility over a " +
+                            "photo — Glance can't draw a text shadow, so weight and colour " +
+                            "are the only levers there are.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                     Text(
                         "Larger text may clip on a small tile — drag the widget's edge to " +
                             "resize it if that happens.",

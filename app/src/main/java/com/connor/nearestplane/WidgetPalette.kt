@@ -3,6 +3,7 @@ package com.connor.nearestplane
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.glance.GlanceTheme
+import androidx.glance.text.FontWeight
 import androidx.glance.unit.ColorProvider
 import kotlin.math.roundToInt
 
@@ -40,6 +41,16 @@ object WidgetPalette {
     /** Base point size scaled by the user's text-size preference. */
     fun size(base: Int, a: AppSettings.Appearance): Int =
         (base * a.textScale.factor).roundToInt()
+
+    /**
+     * One step heavier when the user asks for bold. Glance offers only three
+     * weights, so this saturates at Bold rather than quietly doing nothing.
+     */
+    fun weight(base: FontWeight, a: AppSettings.Appearance): FontWeight = when {
+        a.textWeight != WidgetTextWeight.BOLD -> base
+        base == FontWeight.Normal -> FontWeight.Medium
+        else -> FontWeight.Bold
+    }
 
     /**
      * VFR/MVFR/IFR/LIFR are a fixed aviation convention, so these never follow

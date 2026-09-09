@@ -16,7 +16,7 @@ Both are free to run. No API keys, no accounts, no paid tiers.
 
 | | Nearest Plane | Nearest METAR |
 |---|---|---|
-| Source | airplanes.live + adsbdb | NOAA aviationweather.gov |
+| Source | adsb.fi + adsbdb | NOAA aviationweather.gov |
 | Background refresh | 15 min | 30 min |
 | Tap does | open detail screen | open detail screen |
 | Search area | 10–100 nm, your choice | ~45 nm box, nearest station wins |
@@ -238,11 +238,16 @@ has **no text shadow support**, unlike regular Compose. There's no way to make
 white legible over an arbitrary bright photo, so if your wallpaper fights with
 it, pick a colour that wins. Amber and cyan read well over most photographs.
 
-### Text size
+### Text size and weight
 
-Compact (0.9×), Normal, Large (1.15×), Extra large (1.3×). Scales every
+Size: Compact (0.9×), Normal, Large (1.15×), Extra large (1.3×). Scales every
 line on both widgets proportionally. On a small tile, larger text may clip —
 drag the widget's edge to resize.
+
+Weight: Regular or **Bold** (default). Bold promotes every line one step, which
+is the other half of legibility over a photo — Glance can't draw a text shadow,
+so weight and colour are the only levers there are. Regular gets you the lighter
+look back.
 
 Flight category colours (VFR / MVFR / IFR / LIFR) deliberately ignore all of
 this. They're a fixed aviation convention and recolouring them would make the
@@ -410,11 +415,11 @@ the tile is interesting, and needing a rebuild to turn them was absurd.
 - **Always get a TAF** — right now the nearest station wins even if it's a small
   field that doesn't issue one. Filter to stations that returned a TAF if you'd
   rather always have a forecast.
-- **Different ADS-B source** — one constant, `ENDPOINT` in `AdsbClient.kt`.
-  `https://opendata.adsb.fi/api/v2/lat/%s/lon/%s/dist/%d` and
-  `https://api.adsb.lol/v2/point/%s/%s/%d` are drop-in; all three return the same
-  ADSBExchange v2 shape.
-- **Point at your own Pi** — swap `ENDPOINT` for your dump1090 host's
+- **Different ADS-B source** — `ENDPOINTS` in `AdsbClient.kt`, tried in order.
+  Add or reorder freely; they all return the ADSBExchange v2 shape, with the
+  one wrinkle that adsb.fi names the aircraft list `aircraft` and adsb.lol
+  names it `ac`. The client accepts either.
+- **Point at your own Pi** — put your dump1090 host's
   `/data/aircraft.json`. Note dump1090 has no `dst` or `dir` fields, so you'd
   compute distance and bearing from lat/lon yourself before sorting. There's
   already a haversine in `AviationWeatherClient` you can lift.
@@ -437,6 +442,13 @@ the tile is interesting, and needing a rebuild to turn them was absurd.
 ---
 
 ## Troubleshooting
+
+**Plane tile shows an HTTP 403** — airplanes.live closed its public API in
+September 2026; it answers every request with 403 and a note asking you to get
+in touch. The app moved to adsb.fi, with adsb.lol as an automatic fallback, so
+this shouldn't recur — and if one of those goes the same way, the other is tried
+without a code change. Diagnostics names the host that refused.
+
 
 **"App not installed" when sideloading** — nearly always a signature mismatch:
 you already have a copy signed with a different key. Uninstall it and install

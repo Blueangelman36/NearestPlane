@@ -63,15 +63,15 @@ class NearestPlaneWidget : GlanceAppWidget() {
         ) {
             when (status) {
                 "no_permission" -> {
-                    Line("No location set", 16, look, FontWeight.Medium)
-                    Line("Tap to set it up", 12, look, muted = true)
+                    Line("No location set", 18, look, FontWeight.Medium)
+                    Line("Tap to set it up", 14, look, muted = true)
                 }
                 "never" -> {
-                    Line("Tap to find a plane", 16, look, FontWeight.Medium)
+                    Line("Tap to find a plane", 18, look, FontWeight.Medium)
                 }
                 "error" -> {
-                    Line("Tap to retry", 15, look, FontWeight.Medium)
-                    Line(prefs[WidgetState.STALE_NOTE].orEmpty(), 12, look, muted = true)
+                    Line("Tap to retry", 17, look, FontWeight.Medium)
+                    Line(prefs[WidgetState.STALE_NOTE].orEmpty(), 14, look, muted = true)
                 }
                 else -> Content(prefs, look)
             }
@@ -84,13 +84,13 @@ class NearestPlaneWidget : GlanceAppWidget() {
 
         // Line 1: callsign, emergency flag if any, airline pushed alongside.
         Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
-            Line(prefs[WidgetState.TITLE].orEmpty(), 19, look, FontWeight.Bold)
+            Line(prefs[WidgetState.TITLE].orEmpty(), 22, look, FontWeight.Bold)
             if (emergency.isNotBlank()) {
                 Spacer(GlanceModifier.width(6.dp))
                 Text(
                     text = emergency,
                     style = TextStyle(
-                        fontSize = WidgetPalette.size(11, look).sp,
+                        fontSize = WidgetPalette.size(13, look).sp,
                         fontWeight = FontWeight.Bold,
                         color = ColorProvider(Color(0xFFEF5350))
                     )
@@ -99,7 +99,7 @@ class NearestPlaneWidget : GlanceAppWidget() {
             val airline = prefs[WidgetState.AIRLINE].orEmpty()
             if (airline.isNotBlank()) {
                 Spacer(GlanceModifier.width(6.dp))
-                Line(airline, 12, look, muted = true, maxLines = 1)
+                Line(airline, 14, look, muted = true, maxLines = 1)
             }
         }
 
@@ -109,12 +109,12 @@ class NearestPlaneWidget : GlanceAppWidget() {
         if (route.isNotBlank()) {
             Line(
                 listOf(route, timing).filter { it.isNotBlank() }.joinToString("  "),
-                13, look, FontWeight.Medium, maxLines = 1
+                15, look, FontWeight.Medium, maxLines = 1
             )
         }
 
         // Line 3: full type name.
-        Line(prefs[WidgetState.TYPE_NAME].orEmpty(), 13, look, maxLines = 1)
+        Line(prefs[WidgetState.TYPE_NAME].orEmpty(), 15, look, FontWeight.Medium, maxLines = 1)
 
         // Line 4: distance, altitude, speed and age, all on one row.
         val tail = listOf(
@@ -124,7 +124,7 @@ class NearestPlaneWidget : GlanceAppWidget() {
                 ageLabel(prefs[WidgetState.UPDATED_AT] ?: 0L)
             }
         ).filter { it.isNotBlank() }.joinToString(" · ")
-        Line(tail, 12, look, muted = true, maxLines = 1)
+        Line(tail, 14, look, muted = true, maxLines = 1)
     }
 
     @Composable
@@ -142,7 +142,7 @@ class NearestPlaneWidget : GlanceAppWidget() {
             maxLines = maxLines,
             style = TextStyle(
                 fontSize = WidgetPalette.size(size, look).sp,
-                fontWeight = weight,
+                fontWeight = WidgetPalette.weight(weight, look),
                 color = if (muted) WidgetPalette.secondaryText(look)
                 else WidgetPalette.primaryText(look)
             )

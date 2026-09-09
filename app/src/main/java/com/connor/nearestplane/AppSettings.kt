@@ -28,6 +28,12 @@ enum class WidgetTextColor(val label: String, val argb: Long?) {
     GREEN("Green", 0xFF81C784)
 }
 
+/**
+ * Glance has no text shadow, so weight is the only other lever on legibility
+ * over a busy wallpaper — the same reason the fixed text colours exist.
+ */
+enum class WidgetTextWeight(val label: String) { REGULAR("Regular"), BOLD("Bold") }
+
 enum class WidgetTextScale(val label: String, val factor: Float) {
     COMPACT("Compact", 0.9f),
     NORMAL("Normal", 1.0f),
@@ -85,6 +91,7 @@ object AppSettings {
     private val BACKGROUND = stringPreferencesKey("widget_background")
     private val TEXT_COLOR = stringPreferencesKey("widget_text_color")
     private val TEXT_SCALE = stringPreferencesKey("widget_text_scale")
+    private val TEXT_WEIGHT = stringPreferencesKey("widget_text_weight")
     private val TEMPERATURE = stringPreferencesKey("temperature_unit")
     private val RADIUS = stringPreferencesKey("search_radius")
     private val CEILING = stringPreferencesKey("altitude_ceiling")
@@ -97,6 +104,7 @@ object AppSettings {
         val background: WidgetBackground = WidgetBackground.DYNAMIC,
         val textColor: WidgetTextColor = WidgetTextColor.AUTO,
         val textScale: WidgetTextScale = WidgetTextScale.NORMAL,
+        val textWeight: WidgetTextWeight = WidgetTextWeight.BOLD,
         val temperature: TemperatureUnit = TemperatureUnit.CELSIUS
     )
 
@@ -110,6 +118,7 @@ object AppSettings {
         background = enumOr(p[BACKGROUND], WidgetBackground.DYNAMIC),
         textColor = enumOr(p[TEXT_COLOR], WidgetTextColor.AUTO),
         textScale = enumOr(p[TEXT_SCALE], WidgetTextScale.NORMAL),
+        textWeight = enumOr(p[TEXT_WEIGHT], WidgetTextWeight.BOLD),
         temperature = enumOr(p[TEMPERATURE], TemperatureUnit.CELSIUS)
     )
 
@@ -141,6 +150,10 @@ object AppSettings {
 
     suspend fun setTextScale(context: Context, v: WidgetTextScale) {
         context.settingsStore.edit { it[TEXT_SCALE] = v.name }
+    }
+
+    suspend fun setTextWeight(context: Context, v: WidgetTextWeight) {
+        context.settingsStore.edit { it[TEXT_WEIGHT] = v.name }
     }
 
     suspend fun setTemperature(context: Context, v: TemperatureUnit) {

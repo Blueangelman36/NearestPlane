@@ -63,28 +63,28 @@ class WeatherWidget : GlanceAppWidget() {
         ) {
             when (status) {
                 "no_permission" -> {
-                    Line("No location set", 15, look, FontWeight.Medium)
-                    Line("Tap to set it up", 12, look, muted = true)
+                    Line("No location set", 17, look, FontWeight.Medium)
+                    Line("Tap to set it up", 14, look, muted = true)
                 }
                 "never" -> {
-                    Line("Tap for airport weather", 15, look, FontWeight.Medium)
+                    Line("Tap for airport weather", 17, look, FontWeight.Medium)
                 }
                 "error" -> {
-                    Line("Tap to retry", 15, look, FontWeight.Medium)
-                    Line(prefs[WxState.STALE_NOTE].orEmpty(), 12, look, muted = true)
+                    Line("Tap to retry", 17, look, FontWeight.Medium)
+                    Line(prefs[WxState.STALE_NOTE].orEmpty(), 14, look, muted = true)
                 }
                 else -> {
                     // Row 1: station, category, and age together — the age used
                     // to sit on its own line and earned none of that space.
                     Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
-                        Line(prefs[WxState.STATION].orEmpty(), 20, look, FontWeight.Bold)
+                        Line(prefs[WxState.STATION].orEmpty(), 23, look, FontWeight.Bold)
                         Spacer(GlanceModifier.width(6.dp))
                         val cat = prefs[WxState.CATEGORY].orEmpty()
                         if (cat.isNotBlank()) {
                             Text(
                                 text = cat,
                                 style = TextStyle(
-                                    fontSize = WidgetPalette.size(13, look).sp,
+                                    fontSize = WidgetPalette.size(15, look).sp,
                                     fontWeight = FontWeight.Bold,
                                     color = ColorProvider(WidgetPalette.categoryColor(cat, look))
                                 )
@@ -93,19 +93,20 @@ class WeatherWidget : GlanceAppWidget() {
                         Spacer(GlanceModifier.width(6.dp))
                         val note = prefs[WxState.STALE_NOTE].orEmpty()
                             .ifBlank { ageLabel(prefs[WxState.UPDATED_AT] ?: 0L) }
-                        Line(note, 11, look, muted = true, maxLines = 1)
+                        Line(note, 13, look, muted = true, maxLines = 1)
                     }
 
                     // Row 2: decoded summary.
-                    Line(prefs[WxState.SUMMARY].orEmpty(), 14, look, maxLines = 1)
+                    Line(prefs[WxState.SUMMARY].orEmpty(), 16, look, FontWeight.Medium, maxLines = 1)
 
                     // Row 3: raw METAR, capped at two lines instead of three.
                     Text(
                         text = prefs[WxState.RAW_METAR].orEmpty(),
                         maxLines = 2,
                         style = TextStyle(
-                            fontSize = WidgetPalette.size(11, look).sp,
+                            fontSize = WidgetPalette.size(13, look).sp,
                             fontFamily = FontFamily.Monospace,
+                            fontWeight = WidgetPalette.weight(FontWeight.Normal, look),
                             color = WidgetPalette.secondaryText(look)
                         )
                     )
@@ -129,7 +130,7 @@ class WeatherWidget : GlanceAppWidget() {
             maxLines = maxLines,
             style = TextStyle(
                 fontSize = WidgetPalette.size(size, look).sp,
-                fontWeight = weight,
+                fontWeight = WidgetPalette.weight(weight, look),
                 color = if (muted) WidgetPalette.secondaryText(look)
                 else WidgetPalette.primaryText(look)
             )

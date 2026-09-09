@@ -10,17 +10,31 @@ import java.util.Locale
 /**
  * Fetches live aircraft from a community ADS-B aggregator.
  *
- * All three of these speak the same response shape, so switching is a
- * one-line change. If you later point this at your own Pi, dump1090's
- * /data/aircraft.json is close but has no `dst` field — you'd compute
- * distance yourself with the haversine below.
+ * If you later point this at your own Pi, dump1090's /data/aircraft.json is
+ * close but has no `dst` field — you'd compute distance yourself with the
+ * haversine in AviationWeatherClient.
  */
 object AdsbClient {
 
-    // airplanes.live — free, no key. Swap for either of these if it's flaky:
-    //   https://opendata.adsb.fi/api/v2/lat/%s/lon/%s/dist/%d
-    //   https://api.adsb.lol/v2/point/%s/%s/%d
-    private const val ENDPOINT = "https://api.airplanes.live/v2/point/%s/%s/%d"
+    /**
+     * Tried in order, first success wins.
+     *
+     * This is a list rather than a constant because airplanes.live closed its
+     * public v2 API in September 2026 — it answers 403 with "please contact
+     * us" to every request, key or no key — and took the widget down with it.
+     * One hardcoded host is one press release away from a dead tile.
+     *
+     * adsb.fi leads because it carries `desc` and `ownOp`, which become the
+     * full type name and the operator line. adsb.lol has neither, so on the
+     * fallback the type name comes from adsbdb or the local ICAO table instead,
+     * and the operator line may simply be absent. Everything else is the same
+     * ADSBExchange v2 shape, except that adsb.fi names the list `aircraft`
+     * where adsb.lol names it `ac`.
+     */
+    private val ENDPOINTS = listOf(
+        "https://opendata.adsb.fi/api/v2/lat/%s/lon/%s/dist/%d",
+        "https://api.adsb.lol/v2/point/%s/%s/%d"
+    )
 
     private const val TIMEOUT_MS = 12_000
 
@@ -40,15 +54,33 @@ object AdsbClient {
         includeGround: Boolean = false,
         maxAltitudeFt: Int? = null
     ): Aircraft? = withContext(Dispatchers.IO) {
+        var failure: Exception? = null
+        for (endpoint in ENDPOINTS) {
+            try {
+                // A successful fetch is authoritative, including when it finds
+                // nothing: an empty sky is an answer, not a reason to ask again.
+                return@withContext pick(
+                    fetch(endpoint, lat, lon, radiusNm),
+                    includeGround,
+                    maxAltitudeFt
+                )
+            } catch (e: Exception) {
+                failure = e
+            }
+        }
+        throw failure ?: IllegalStateException("No ADS-B endpoint configured")
+    }
+
+    private fun fetch(endpoint: String, lat: Double, lon: Double, radiusNm: Int): String {
         val url = URL(
-            ENDPOINT.format(
+            endpoint.format(
                 Locale.US,
                 "%.4f".format(Locale.US, lat),
                 "%.4f".format(Locale.US, lon),
                 radiusNm
             )
         )
-        val body = (url.openConnection() as HttpURLConnection).run {
+        return (url.openConnection() as HttpURLConnection).run {
             requestMethod = "GET"
             connectTimeout = TIMEOUT_MS
             readTimeout = TIMEOUT_MS
@@ -56,18 +88,23 @@ object AdsbClient {
             setRequestProperty("User-Agent", "NearestPlaneWidget/1.0")
             try {
                 if (responseCode !in 200..299) {
-                    throw IllegalStateException("ADS-B API returned HTTP $responseCode")
+                    // Name the host: "HTTP 403" alone doesn't say who refused.
+                    throw IllegalStateException("${url.host} returned HTTP $responseCode")
                 }
                 inputStream.bufferedReader().use { it.readText() }
             } finally {
                 disconnect()
             }
         }
+    }
 
-        val list = JSONObject(body).optJSONArray("ac") ?: return@withContext null
+    private fun pick(body: String, includeGround: Boolean, maxAltitudeFt: Int?): Aircraft? {
+        val root = JSONObject(body)
+        val list = root.optJSONArray("ac") ?: root.optJSONArray("aircraft") ?: return null
 
-        (0 until list.length())
-            .map { parseAircraft(list.getJSONObject(it)) }
+        return (0 until list.length())
+            .mapNotNull { list.optJSONObject(it) }
+            .map { parseAircraft(it) }
             .filter { includeGround || !it.onGround }
             // An unreported altitude is not evidence of a high one, and
             // dropping those would lose exactly the close GA traffic the
