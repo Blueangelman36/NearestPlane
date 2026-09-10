@@ -31,6 +31,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -103,6 +104,20 @@ class MainActivity : ComponentActivity() {
         var pinBusy by remember { mutableStateOf(false) }
         var pinError by remember { mutableStateOf<String?>(null) }
 
+        var update by remember { mutableStateOf<Release?>(null) }
+        var updateChecked by remember { mutableStateOf(false) }
+
+        // A sideloaded app has no update channel, so nothing would otherwise
+        // ever mention that a new version exists. Failure here is silent by
+        // design: not knowing about an update is not worth an error message.
+        suspend fun checkForUpdate() {
+            update = runCatching { UpdateCheck.latest() }.getOrNull()
+                ?.takeIf { UpdateCheck.isNewer(it.version, BuildConfig.VERSION_NAME) }
+            updateChecked = true
+        }
+
+        LaunchedEffect(Unit) { checkForUpdate() }
+
         fun redrawWidgets() = scope.launch {
             NearestPlaneWidget().updateAll(activity)
             WeatherWidget().updateAll(activity)
@@ -170,6 +185,24 @@ class MainActivity : ComponentActivity() {
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 Text("Nearest Plane", style = MaterialTheme.typography.headlineMedium)
+
+                update?.let { available ->
+                    SectionCard("Version ${available.version} is available") {
+                        Text(
+                            "You have ${BuildConfig.VERSION_NAME}. Downloading opens your " +
+                                "browser; tap the file when it lands to install over the top.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = {
+                                openUrl(available.apkUrl ?: available.pageUrl)
+                            }) { Text("Download") }
+                            OutlinedButton(onClick = { openUrl(available.pageUrl) }) {
+                                Text("What changed")
+                            }
+                        }
+                    }
+                }
 
                 SectionCard("Location") {
                     Text(
@@ -498,6 +531,28 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                SectionCard("Version") {
+                    Text(
+                        "Nearest Plane ${BuildConfig.VERSION_NAME}",
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        if (update != null) "An update is waiting, above."
+                        else if (updateChecked) "This is the latest release."
+                        else "Checking for a newer release…",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = {
+                            updateChecked = false
+                            scope.launch { checkForUpdate() }
+                        }) { Text("Check again") }
+                        OutlinedButton(onClick = {
+                            openUrl("https://github.com/Blueangelman36/NearestPlane")
+                        }) { Text("Source") }
+                    }
+                }
+
                 Text(
                     "Add the tiles by long-pressing your home screen, tapping Widgets, then " +
                         "finding Nearest Plane. Two tiles are listed.",
@@ -561,6 +616,10 @@ class MainActivity : ComponentActivity() {
                 startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
             }
         }
+    }
+
+    private fun openUrl(url: String) {
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
     }
 
     private fun openAppSettings() {

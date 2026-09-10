@@ -36,12 +36,30 @@ one into a release. On the phone, open this repo's **Releases** page, tap the
 To cut a release:
 
 ```
-git tag v1.1 && git push origin v1.1
+git tag v1.6 && git push origin v1.6
 ```
 
 If you'd rather not tag, the same APK is on the **Actions** tab under the latest
 run, as the `nearest-plane-apk` artifact — though workflow artifacts expire and
 release assets don't.
+
+### Staying up to date
+
+A sideloaded app has no update channel: Android never checks anywhere, so
+nothing will mention that a new version exists unless something goes looking.
+
+The app looks. It checks the releases API when you open it, and shows a card at
+the top of the settings screen when there's something newer, with the version
+you're on in a card at the bottom. This needs no credentials because the repo is
+public — nothing is embedded in the APK. Were the repo private again, this would
+have to be removed rather than ship a token that anyone could extract from the
+package.
+
+For proper background updates, [Obtainium](https://github.com/ImranR98/Obtainium)
+watches releases pages and installs from them. Point it at this repo's URL.
+Fully unattended installs need Shizuku or root, since Android otherwise requires
+a human to confirm every package install; without one you get a notification and
+a confirm tap.
 
 These are release builds, self-signed with one fixed key held in the repository
 secrets (`SIGNING_KEYSTORE_BASE64`, `SIGNING_KEYSTORE_PASSWORD`,
@@ -457,8 +475,7 @@ two of those releases conflict with each other.
 
 If it's a fresh install and it still fails, check the download rather than the
 build: every release lists the APK's SHA-256, and a mismatch means a truncated
-file. Private-repo asset links can hand a browser an HTML error page with an
-`.apk` name, which the installer reports the same way. Also confirm the app
+file. Confirm the app
 you're opening the file *from* — the browser, or Files, or My Files — holds
 "Install unknown apps" permission; it's granted per-app, so allowing Chrome
 doesn't allow the file manager.
