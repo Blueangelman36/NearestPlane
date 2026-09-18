@@ -1,0 +1,38 @@
+{
+  "id": "f3194b63",
+  "reason": "Held on the activity rather than remembered in the composition. Both values are changed from outside the app in system Settings; remembered state never updates, so the battery-exemption card used to stay up until the app was killed.",
+  "source": null,
+  "author": "Blueangelman36",
+  "created": "2026-09-18",
+  "snippet": "private var granted by mutableStateOf(false)",
+  "anchors": {
+    "5": {
+      "version": 5,
+      "path": "app/src/main/java/com/connor/nearestplane/MainActivity.kt",
+      "scope": "MainActivity",
+      "kind": "property_declaration",
+      "line": 61,
+      "exact": "40d8c6271f3ef559",
+      "shape": "a1a64f0a2b0a6dde",
+      "dupes": {
+        "exact": 1,
+        "shape": 2,
+        "other_exact": 0,
+        "other_shape": 0,
+        "far_exact": 0,
+        "far_shape": 0
+      },
+      "rival": 0.6666666666666666,
+      "tokens": [
+        "private",
+        "var",
+        "granted",
+        "by",
+        "mutableStateOf",
+        "(",
+        "false",
+        ")"
+      ]
+    }
+  }
+}

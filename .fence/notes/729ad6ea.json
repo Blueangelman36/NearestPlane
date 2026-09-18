@@ -1,0 +1,49 @@
+{
+  "id": "729ad6ea",
+  "reason": "Widening longitude by 1/cos(lat) is not over-engineering. A degree of longitude shrinks going north, so a fixed 0.75 box is 45 nm at the equator, 33 in Chicago, 19 in Fairbanks and 14 in Utqiagvik - narrowest exactly where reporting stations are sparsest.",
+  "source": null,
+  "author": "Blueangelman36",
+  "created": "2026-09-18",
+  "snippet": "val lonHalf = boxDeg / cos(Math.toRadians(lat)).coerceAtLeast(0.15)",
+  "anchors": {
+    "5": {
+      "version": 5,
+      "path": "app/src/main/java/com/connor/nearestplane/wx/AviationWeatherClient.kt",
+      "scope": "AviationWeatherClient.boxesAround",
+      "kind": "property_declaration",
+      "line": 71,
+      "exact": "d6df43d973d3302b",
+      "shape": "830a0ded40f2883d",
+      "dupes": {
+        "exact": 1,
+        "shape": 1,
+        "other_exact": 0,
+        "other_shape": 0,
+        "far_exact": 0,
+        "far_shape": 0
+      },
+      "rival": 0.2727272727272727,
+      "tokens": [
+        "val",
+        "lonHalf",
+        "=",
+        "boxDeg",
+        "/",
+        "cos",
+        "(",
+        "Math",
+        ".",
+        "toRadians",
+        "(",
+        "lat",
+        ")",
+        ")",
+        ".",
+        "coerceAtLeast",
+        "(",
+        "0.15",
+        ")"
+      ]
+    }
+  }
+}

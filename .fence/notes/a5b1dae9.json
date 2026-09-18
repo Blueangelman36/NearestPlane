@@ -1,0 +1,40 @@
+{
+  "id": "a5b1dae9",
+  "reason": "A list, not a constant. airplanes.live closed its public API in September 2026 and answers every request 403 with 'please contact us'; that took the tile down. One hardcoded host is one press release away from a dead widget. adsb.fi leads because it carries desc and ownOp, which adsb.lol has at 0% coverage.",
+  "source": null,
+  "author": "Blueangelman36",
+  "created": "2026-09-18",
+  "snippet": "private val ENDPOINTS = listOf(\n    \"https://opendata.adsb.fi/api/v2/lat/%s/lon/%s/dist/%d\",\n    \"https://api.adsb.lol/v2/point/%s/%s/%d\"\n)",
+  "anchors": {
+    "5": {
+      "version": 5,
+      "path": "app/src/main/java/com/connor/nearestplane/AdsbClient.kt",
+      "scope": "AdsbClient",
+      "kind": "property_declaration",
+      "line": 34,
+      "exact": "bf2411f561134853",
+      "shape": "1138518b0d7a3d33",
+      "dupes": {
+        "exact": 1,
+        "shape": 1,
+        "other_exact": 0,
+        "other_shape": 0,
+        "far_exact": 0,
+        "far_shape": 0
+      },
+      "rival": 0.1111111111111111,
+      "tokens": [
+        "private",
+        "val",
+        "ENDPOINTS",
+        "=",
+        "listOf",
+        "(",
+        "<8c964ed4c9eae13a>",
+        ",",
+        "<70cf2f35bf15bde3>",
+        ")"
+      ]
+    }
+  }
+}

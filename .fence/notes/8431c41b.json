@@ -1,0 +1,43 @@
+{
+  "id": "8431c41b",
+  "reason": "The '?: 0' deliberately KEEPS aircraft that report no altitude. An unknown altitude is not evidence of a high one, and dropping them loses exactly the low, slow GA traffic the ceiling setting exists to surface.",
+  "source": null,
+  "author": "Blueangelman36",
+  "created": "2026-09-18",
+  "snippet": ".filter { maxAltitudeFt == null || (it.altitudeFt ?: 0) <= maxAltitudeFt }",
+  "anchors": {
+    "5": {
+      "version": 5,
+      "path": "app/src/main/java/com/connor/nearestplane/AdsbClient.kt",
+      "scope": "AdsbClient.pick",
+      "kind": "binary_expression",
+      "line": 112,
+      "exact": "6258bfb4da8b5c7e",
+      "shape": "6a01786102475d46",
+      "dupes": {
+        "exact": 1,
+        "shape": 1,
+        "other_exact": 0,
+        "other_shape": 0,
+        "far_exact": 0,
+        "far_shape": 0
+      },
+      "rival": 0.13793103448275862,
+      "tokens": [
+        "maxAltitudeFt",
+        "==",
+        "null",
+        "||",
+        "(",
+        "it",
+        ".",
+        "altitudeFt",
+        "?:",
+        "0",
+        ")",
+        "<=",
+        "maxAltitudeFt"
+      ]
+    }
+  }
+}

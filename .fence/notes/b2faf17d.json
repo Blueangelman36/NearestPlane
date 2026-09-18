@@ -1,0 +1,49 @@
+{
+  "id": "b2faf17d",
+  "reason": "coerceIn(0.0, 1.0), not abs(). A floating point overshoot past 1.0 makes asin return NaN, which propagates into every distance and silently picks the wrong nearest station.",
+  "source": null,
+  "author": "Blueangelman36",
+  "created": "2026-09-18",
+  "snippet": "return 2 * r * asin(sqrt(a.coerceIn(0.0, 1.0)))",
+  "anchors": {
+    "5": {
+      "version": 5,
+      "path": "app/src/main/java/com/connor/nearestplane/wx/AviationWeatherClient.kt",
+      "scope": "AviationWeatherClient.haversineNm",
+      "kind": "return_expression",
+      "line": 252,
+      "exact": "e7fbe721703d9534",
+      "shape": "e3d9a560dd0332df",
+      "dupes": {
+        "exact": 1,
+        "shape": 1,
+        "other_exact": 0,
+        "other_shape": 0,
+        "far_exact": 1,
+        "far_shape": 1
+      },
+      "rival": 0.10526315789473684,
+      "tokens": [
+        "return",
+        "2",
+        "*",
+        "r",
+        "*",
+        "asin",
+        "(",
+        "sqrt",
+        "(",
+        "a",
+        ".",
+        "coerceIn",
+        "(",
+        "0.0",
+        ",",
+        "1.0",
+        ")",
+        ")",
+        ")"
+      ]
+    }
+  }
+}

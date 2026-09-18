@@ -1,0 +1,44 @@
+{
+  "id": "5c723baf",
+  "reason": "Only a 404 is cached as a miss. The airframe cache never expires, so writing 'unknown' over a 429 or a 503 would hide that aircraft's type name permanently. Any other non-2xx throws instead, leaving whatever is already cached.",
+  "source": null,
+  "author": "Blueangelman36",
+  "created": "2026-09-18",
+  "snippet": "if (responseCode == 404) return@withContext AdsbdbResult(null, null)",
+  "anchors": {
+    "5": {
+      "version": 5,
+      "path": "app/src/main/java/com/connor/nearestplane/RouteClient.kt",
+      "scope": "AdsbdbClient.fetch",
+      "kind": "if_expression",
+      "line": 139,
+      "exact": "239cda2f89193657",
+      "shape": "317530bb515de3d8",
+      "dupes": {
+        "exact": 1,
+        "shape": 1,
+        "other_exact": 0,
+        "other_shape": 0,
+        "far_exact": 0,
+        "far_shape": 0
+      },
+      "rival": 0.2558139534883721,
+      "tokens": [
+        "if",
+        "(",
+        "responseCode",
+        "==",
+        "404",
+        ")",
+        "return@",
+        "withContext",
+        "AdsbdbResult",
+        "(",
+        "null",
+        ",",
+        "null",
+        ")"
+      ]
+    }
+  }
+}

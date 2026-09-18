@@ -1,0 +1,47 @@
+{
+  "id": "e2130c22",
+  "reason": "UPDATE, not KEEP. With KEEP the job enqueued by an older build lives forever and every change made here is silently ignored - including this one, until the app is reinstalled.",
+  "source": null,
+  "author": "Blueangelman36",
+  "created": "2026-09-18",
+  "snippet": "WorkManager.getInstance(context).enqueueUniquePeriodicWork(\n    PERIODIC_NAME,\n    ExistingPeriodicWorkPolicy.UPDATE,\n    request\n)",
+  "anchors": {
+    "5": {
+      "version": 5,
+      "path": "app/src/main/java/com/connor/nearestplane/RefreshWorker.kt",
+      "scope": "RefreshWorker.Companion.schedulePeriodic",
+      "kind": "call_expression",
+      "line": 167,
+      "exact": "548610b1a36c20ea",
+      "shape": "e78e085c677b22af",
+      "dupes": {
+        "exact": 1,
+        "shape": 1,
+        "other_exact": 0,
+        "other_shape": 0,
+        "far_exact": 1,
+        "far_shape": 1
+      },
+      "rival": 0.18055555555555555,
+      "tokens": [
+        "WorkManager",
+        ".",
+        "getInstance",
+        "(",
+        "context",
+        ")",
+        ".",
+        "enqueueUniquePeriodicWork",
+        "(",
+        "PERIODIC_NAME",
+        ",",
+        "ExistingPeriodicWorkPolicy",
+        ".",
+        "UPDATE",
+        ",",
+        "request",
+        ")"
+      ]
+    }
+  }
+}

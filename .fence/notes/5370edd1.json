@@ -1,0 +1,40 @@
+{
+  "id": "5370edd1",
+  "reason": "Componentwise, not a string compare. '1.10' < '1.9' as strings, so a string compare starts reporting updates backwards the moment version numbers stop being single digits - silently, and only then.",
+  "source": null,
+  "author": "Blueangelman36",
+  "created": "2026-09-18",
+  "snippet": "if (x != y) return x > y",
+  "anchors": {
+    "5": {
+      "version": 5,
+      "path": "app/src/main/java/com/connor/nearestplane/UpdateCheck.kt",
+      "scope": "UpdateCheck.isNewer",
+      "kind": "if_expression",
+      "line": 79,
+      "exact": "984976a7df6aa1da",
+      "shape": "b93208836bb7506a",
+      "dupes": {
+        "exact": 1,
+        "shape": 1,
+        "other_exact": 0,
+        "other_shape": 0,
+        "far_exact": 0,
+        "far_shape": 0
+      },
+      "rival": 0.0,
+      "tokens": [
+        "if",
+        "(",
+        "x",
+        "!=",
+        "y",
+        ")",
+        "return",
+        "x",
+        ">",
+        "y"
+      ]
+    }
+  }
+}
