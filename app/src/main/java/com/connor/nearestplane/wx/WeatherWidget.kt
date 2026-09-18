@@ -8,20 +8,30 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
+import androidx.glance.ColorFilter
+import androidx.glance.Image
+import androidx.glance.ImageProvider
+import androidx.glance.action.Action
+import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.action.ActionCallback
+import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
+import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.background
 import androidx.glance.currentState
 import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.padding
+import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.layout.wrapContentHeight
 import androidx.glance.text.FontFamily
@@ -31,6 +41,7 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.connor.nearestplane.AppSettings
 import com.connor.nearestplane.MainActivity
+import com.connor.nearestplane.R
 import com.connor.nearestplane.WidgetPalette
 import java.util.concurrent.TimeUnit
 
@@ -52,15 +63,17 @@ class WeatherWidget : GlanceAppWidget() {
         val tap = if (status == "no_permission") actionStartActivity<MainActivity>()
         else actionStartActivity<WeatherDetailActivity>()
 
-        Column(
+        Row(
             modifier = GlanceModifier
                 .fillMaxWidth()
                 .wrapContentHeight()
                 .background(WidgetPalette.background(look))
                 .cornerRadius(16.dp)
                 .padding(horizontal = 12.dp, vertical = 8.dp)
-                .clickable(tap)
+                .clickable(tap),
+            verticalAlignment = Alignment.Vertical.Top
         ) {
+          Column(modifier = GlanceModifier.defaultWeight()) {
             when (status) {
                 "no_permission" -> {
                     Line("No location set", 17, look, FontWeight.Medium)
@@ -112,6 +125,35 @@ class WeatherWidget : GlanceAppWidget() {
                     )
                 }
             }
+          }
+
+            // Nothing to refresh from without a location, so no button for it.
+            if (status != "no_permission") {
+                RefreshButton(look, actionRunCallback<WeatherRefreshAction>())
+            }
+        }
+    }
+
+    /**
+     * Its own tap target inside a tile that is itself tappable: the inner
+     * clickable wins, so this refreshes in place rather than opening the detail
+     * screen. METARs only update hourly, but a tile can be half an hour behind
+     * one, and that is exactly when you want to ask.
+     */
+    @Composable
+    private fun RefreshButton(look: AppSettings.Appearance, onClick: Action) {
+        Box(
+            modifier = GlanceModifier
+                .padding(start = 8.dp, top = 2.dp, bottom = 8.dp, end = 2.dp)
+                .clickable(onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                provider = ImageProvider(R.drawable.ic_refresh),
+                contentDescription = "Refresh",
+                modifier = GlanceModifier.size(WidgetPalette.size(18, look).dp),
+                colorFilter = ColorFilter.tint(WidgetPalette.secondaryText(look))
+            )
         }
     }
 
@@ -145,6 +187,26 @@ class WeatherWidget : GlanceAppWidget() {
             minutes < 60 -> "${minutes}m ago"
             else -> "${minutes / 60}h ago"
         }
+    }
+}
+
+/** The refresh button: queue a fetch, and say so while it runs. */
+class WeatherRefreshAction : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters
+    ) {
+        // Said immediately, because the fetch takes seconds and nothing else on
+        // the tile moves until it lands. The worker overwrites this note on both
+        // its paths, so it clears itself.
+        runCatching {
+            updateAppWidgetState(context, glanceId) {
+                it[WxState.STALE_NOTE] = "refreshing…"
+            }
+            WeatherWidget().update(context, glanceId)
+        }
+        WxRefreshWorker.refreshNow(context)
     }
 }
 

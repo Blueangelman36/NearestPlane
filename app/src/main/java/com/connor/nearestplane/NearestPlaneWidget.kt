@@ -9,25 +9,35 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
+import androidx.glance.ColorFilter
+import androidx.glance.Image
+import androidx.glance.ImageProvider
+import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.action.ActionCallback
+import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
+import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.background
 import androidx.glance.currentState
 import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.padding
+import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.layout.wrapContentHeight
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import androidx.glance.action.Action
 import java.util.concurrent.TimeUnit
 
 class NearestPlaneWidget : GlanceAppWidget() {
@@ -52,29 +62,65 @@ class NearestPlaneWidget : GlanceAppWidget() {
 
         // wrapContentHeight rather than fillMaxSize: the tile shrinks to its
         // content instead of padding out to the full cell.
-        Column(
+        Row(
             modifier = GlanceModifier
                 .fillMaxWidth()
                 .wrapContentHeight()
                 .background(WidgetPalette.background(look))
                 .cornerRadius(16.dp)
                 .padding(horizontal = 12.dp, vertical = 8.dp)
-                .clickable(tap)
+                .clickable(tap),
+            verticalAlignment = Alignment.Vertical.Top
         ) {
-            when (status) {
-                "no_permission" -> {
-                    Line("No location set", 18, look, FontWeight.Medium)
-                    Line("Tap to set it up", 14, look, muted = true)
+            // defaultWeight so the text takes the room the button doesn't, and
+            // the button stays pinned to the right edge at any tile width.
+            Column(modifier = GlanceModifier.defaultWeight()) {
+                when (status) {
+                    "no_permission" -> {
+                        Line("No location set", 18, look, FontWeight.Medium)
+                        Line("Tap to set it up", 14, look, muted = true)
+                    }
+                    "never" -> {
+                        Line("Tap to find a plane", 18, look, FontWeight.Medium)
+                    }
+                    "error" -> {
+                        Line("Tap to retry", 17, look, FontWeight.Medium)
+                        Line(prefs[WidgetState.STALE_NOTE].orEmpty(), 14, look, muted = true)
+                    }
+                    else -> Content(prefs, look)
                 }
-                "never" -> {
-                    Line("Tap to find a plane", 18, look, FontWeight.Medium)
-                }
-                "error" -> {
-                    Line("Tap to retry", 17, look, FontWeight.Medium)
-                    Line(prefs[WidgetState.STALE_NOTE].orEmpty(), 14, look, muted = true)
-                }
-                else -> Content(prefs, look)
             }
+
+            // No refresh button when there's no location to refresh from: the
+            // button would be honest about running and useless about the result.
+            if (status != "no_permission") {
+                RefreshButton(look, actionRunCallback<PlaneRefreshAction>())
+            }
+        }
+    }
+
+    /**
+     * A tap target of its own, inside a tile that is itself tappable. The inner
+     * clickable wins, so this refreshes in place instead of opening the detail
+     * screen — which is the whole point: the tile is usually right, and you
+     * just want it to be right *now*.
+     */
+    @Composable
+    private fun RefreshButton(look: AppSettings.Appearance, onClick: Action) {
+        Box(
+            modifier = GlanceModifier
+                // Padding rather than a bigger glyph: it buys a tap target
+                // without spending tile width on something read at a glance.
+                .padding(start = 8.dp, top = 2.dp, bottom = 8.dp, end = 2.dp)
+                .clickable(onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                provider = ImageProvider(R.drawable.ic_refresh),
+                contentDescription = "Refresh",
+                modifier = GlanceModifier.size(WidgetPalette.size(18, look).dp),
+                colorFilter = ColorFilter.tint(WidgetPalette.secondaryText(look))
+            )
         }
     }
 
@@ -157,5 +203,26 @@ class NearestPlaneWidget : GlanceAppWidget() {
             minutes < 60 -> "${minutes}m ago"
             else -> "${minutes / 60}h ago"
         }
+    }
+}
+
+/** The refresh button: queue a fetch, and say so while it runs. */
+class PlaneRefreshAction : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters
+    ) {
+        // The fetch takes seconds and nothing on the tile moves until it lands,
+        // so without this the button reads as broken and gets tapped again.
+        // The worker overwrites this note on both its success and failure paths,
+        // so it clears itself with no special handling here.
+        runCatching {
+            updateAppWidgetState(context, glanceId) {
+                it[WidgetState.STALE_NOTE] = "refreshing…"
+            }
+            NearestPlaneWidget().update(context, glanceId)
+        }
+        RefreshWorker.refreshNow(context)
     }
 }
