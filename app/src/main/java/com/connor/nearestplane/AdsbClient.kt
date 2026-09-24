@@ -122,8 +122,9 @@ object AdsbClient {
             setRequestProperty("User-Agent", "NearestPlaneWidget/1.0")
             token?.takeIf { it.isNotBlank() }?.let { setRequestProperty("Authorization", "Bearer $it") }
             // A station that refuses a token may redirect to its sign-in page;
-            // following that would read an HTML form as an empty sky.
-            instanceFollowRedirects = false
+            // following that would read an HTML form as an empty sky. Only the
+            // station: an aggregator that moves an endpoint should still work.
+            if (token != null) instanceFollowRedirects = false
             try {
                 if (responseCode !in 200..299) {
                     // Name the host: "HTTP 403" alone doesn't say who refused.
