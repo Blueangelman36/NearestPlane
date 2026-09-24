@@ -83,6 +83,13 @@ data class CachedPosition(val lat: Double, val lon: Double, val ageMinutes: Long
 private val Context.settingsStore: DataStore<Preferences> by preferencesDataStore("app_settings")
 
 /**
+ * The station address and token, in a file of their own so the backup rules
+ * can leave them out: a token that grants the station's coordinates and
+ * everything it has heard does not belong in a cloud backup.
+ */
+private val Context.stationStore: DataStore<Preferences> by preferencesDataStore("station")
+
+/**
  * App-wide settings, separate from each widget's own Glance state so that one
  * change redraws every placed tile.
  */
@@ -216,6 +223,34 @@ object AppSettings {
             it[PIN_LON] = lon
             it[LOCATION_MODE] = LocationMode.FIXED.name
         }
+    }
+
+    // ---- a receiver of your own, asked before the aggregators ----
+
+    private val STATION_URL = stringPreferencesKey("station_url")
+    private val STATION_TOKEN = stringPreferencesKey("station_token")
+
+    private fun readStation(p: Preferences): Station? {
+        val url = p[STATION_URL]?.takeIf { it.isNotBlank() } ?: return null
+        return Station(url, p[STATION_TOKEN].orEmpty())
+    }
+
+    suspend fun station(context: Context): Station? =
+        runCatching { readStation(context.stationStore.data.first()) }.getOrNull()
+
+    fun stationFlow(context: Context): Flow<Station?> =
+        context.stationStore.data.map { readStation(it) }
+
+    /** A blank [token] keeps the one already saved, so editing the address alone works. */
+    suspend fun setStation(context: Context, url: String, token: String) {
+        context.stationStore.edit {
+            it[STATION_URL] = url
+            if (token.isNotBlank()) it[STATION_TOKEN] = token
+        }
+    }
+
+    suspend fun clearStation(context: Context) {
+        context.stationStore.edit { it.clear() }
     }
 
     // ---- last known position, so a failed GPS read never blanks a widget ----

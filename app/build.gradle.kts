@@ -90,4 +90,9 @@ dependencies {
 
     // GPS
     implementation("com.google.android.gms:play-services-location:21.3.0")
+
+    // Unit tests run on the JVM, where Android's org.json is a stub that throws;
+    // the real library stands in for it so the feed parsing can be tested.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20260814")
 }

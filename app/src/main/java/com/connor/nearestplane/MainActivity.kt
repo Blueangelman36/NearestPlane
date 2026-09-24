@@ -42,6 +42,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.glance.appwidget.updateAll
 import com.connor.nearestplane.wx.AviationWeatherClient
@@ -99,6 +101,12 @@ class MainActivity : ComponentActivity() {
         val mode by AppSettings.locationModeFlow(activity)
             .collectAsState(initial = LocationMode.DEVICE)
         val pin by AppSettings.pinFlow(activity).collectAsState(initial = null)
+        val station by AppSettings.stationFlow(activity).collectAsState(initial = null)
+        var stationUrl by remember { mutableStateOf("") }
+        var stationToken by remember { mutableStateOf("") }
+        var stationError by remember { mutableStateOf<String?>(null) }
+        // Show the saved address once it loads, without fighting the user's typing.
+        LaunchedEffect(station?.url) { station?.url?.let { if (stationUrl.isBlank()) stationUrl = it } }
 
         var code by remember { mutableStateOf("") }
         var pinBusy by remember { mutableStateOf(false) }
@@ -351,6 +359,75 @@ class MainActivity : ComponentActivity() {
                         "A ceiling is what stops the tile showing the same airliner at " +
                             "FL380 forty miles away every time. If you live under an airway, " +
                             "it's the difference between a widget and wallpaper.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                SectionCard("Your own receiver") {
+                    Text(
+                        "If you run sdr_windows, or anything that serves dump1090's " +
+                            "aircraft.json, the plane tile asks it first. When it hears nothing " +
+                            "in range, adsb.fi is asked as usual.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    station?.let {
+                        Text("Asking ${it.url}", fontWeight = FontWeight.Medium)
+                    }
+                    OutlinedTextField(
+                        value = stationUrl,
+                        onValueChange = { stationUrl = it; stationError = null },
+                        label = { Text("Station address") },
+                        placeholder = { Text("https://my-pc.tailnet.ts.net") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = stationToken,
+                        onValueChange = { stationToken = it },
+                        label = {
+                            Text(if (station?.token.isNullOrBlank()) "Dashboard token" else "Dashboard token (saved)")
+                        },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                val url = normalizeStationUrl(stationUrl)
+                                if (url == null) {
+                                    stationError = "That needs to be an https:// address, like the one " +
+                                        "tailscale serve prints."
+                                } else {
+                                    scope.launch {
+                                        AppSettings.setStation(activity, url, stationToken.trim())
+                                        stationUrl = url
+                                        stationToken = ""
+                                        refetch()
+                                    }
+                                }
+                            },
+                            enabled = stationUrl.isNotBlank()
+                        ) { Text("Save") }
+                        if (station != null) {
+                            OutlinedButton(onClick = {
+                                scope.launch {
+                                    AppSettings.clearStation(activity)
+                                    stationUrl = ""
+                                    stationToken = ""
+                                    refetch()
+                                }
+                            }) { Text("Stop using it") }
+                        }
+                    }
+                    stationError?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                    }
+                    Text(
+                        "HTTPS only: Tailscale Serve gives the station a real certificate. The " +
+                            "token stays on this phone and is left out of Android's backups. " +
+                            "If the station cannot be reached, Diagnostics says why.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
