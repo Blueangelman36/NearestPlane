@@ -79,7 +79,8 @@ class PlaneDetailActivity : ComponentActivity() {
                     lat = fix.lat,
                     lon = fix.lon,
                     radiusNm = filter.radius.nm,
-                    maxAltitudeFt = filter.ceiling.maxFt
+                    maxAltitudeFt = filter.ceiling.maxFt,
+                    station = AppSettings.station(this@PlaneDetailActivity)
                 )
                 if (plane == null) {
                     error = buildString {

@@ -48,7 +48,9 @@ class RefreshWorker(
         if (fix == null) {
             degrade(context, "no position")
             Diagnostics.noteError(context, "plane", "No position available")
-            return Result.retry()
+            // Bounded like every other failure here: an unbounded retry on a
+            // phone with location off is a job that never finishes trying.
+            return if (runAttemptCount < 3) Result.retry() else Result.success()
         }
 
         val filter = AppSettings.planeFilter(context)
@@ -60,7 +62,9 @@ class RefreshWorker(
                 lat = fix.lat,
                 lon = fix.lon,
                 radiusNm = filter.radius.nm,
-                maxAltitudeFt = filter.ceiling.maxFt
+                maxAltitudeFt = filter.ceiling.maxFt,
+                station = AppSettings.station(context),
+                onStationError = { Diagnostics.noteError(context, "plane", "station: ${it.take(80)}") }
             )
         } catch (e: Exception) {
             val msg = e.message?.take(90) ?: e.javaClass.simpleName

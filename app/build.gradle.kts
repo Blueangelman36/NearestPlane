@@ -1,8 +1,11 @@
 import java.io.File
 
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    // AGP 9 compiles Kotlin itself; applying org.jetbrains.kotlin.android too
+    // is an error there.
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
@@ -25,14 +28,21 @@ val signingKeystore: File? = System.getenv("SIGNING_KEYSTORE_PATH")
 
 android {
     namespace = "com.connor.nearestplane"
-    compileSdk = 35
+    // Compiling against 37.2 is what the current Compose libraries require.
+    // It only makes newer APIs available; targetSdk below is what opts the app
+    // into new runtime behaviour, and that moves separately.
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 2
+        }
+    }
 
     defaultConfig {
         applicationId = "com.connor.nearestplane"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 9
-        versionName = "1.8"
+        targetSdk = 36
+        versionCode = 10
+        versionName = "1.9"
     }
 
     signingConfigs {
@@ -60,9 +70,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
 
     buildFeatures {
         compose = true
@@ -71,23 +78,34 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
+
 dependencies {
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.activity:activity-compose:1.9.3")
-    implementation(platform("androidx.compose:compose-bom:2024.10.01"))
+    implementation("androidx.core:core-ktx:1.19.1")
+    implementation("androidx.activity:activity-compose:1.13.0")
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
 
     // Home-screen widget
-    implementation("androidx.glance:glance-appwidget:1.1.1")
-    implementation("androidx.glance:glance-material3:1.1.1")
+    implementation("androidx.glance:glance-appwidget:1.2.0")
+    implementation("androidx.glance:glance-material3:1.2.0")
 
     // Background refresh
-    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    implementation("androidx.work:work-runtime-ktx:2.12.0")
 
     // App-wide settings shared between the app and both widgets
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation("androidx.datastore:datastore-preferences:1.2.1")
 
     // GPS
-    implementation("com.google.android.gms:play-services-location:21.3.0")
+    implementation("com.google.android.gms:play-services-location:21.4.0")
+
+    // Unit tests run on the JVM, where Android's org.json is a stub that throws;
+    // the real library stands in for it so the feed parsing can be tested.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20260814")
 }

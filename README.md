@@ -36,8 +36,12 @@ one into a release. On the phone, open this repo's **Releases** page, tap the
 To cut a release:
 
 ```
-git tag v1.6 && git push origin v1.6
+git tag v1.9 && git push origin v1.9
 ```
+
+The tag has to match `versionName` in `app/build.gradle.kts`, and CI refuses the
+release when it does not: an APK built from a mismatch would find its own tag on
+the releases page and announce itself as an update, forever.
 
 If you'd rather not tag, the same APK is on the **Actions** tab under the latest
 run, as the `nearest-plane-apk` artifact — though workflow artifacts expire and
@@ -157,10 +161,15 @@ instead, which is why there's no `gradlew` here.
 DataStore, WorkManager and play-services-location, so give it a few minutes.
 
 If it complains about a Gradle or AGP version mismatch, the versions in the root
-`build.gradle.kts` (AGP 8.7.2 / Kotlin 2.0.21) are newer or older than the
-wrapper Android Studio generated. Easiest fix: change the versions in the root
-`build.gradle.kts` back to whatever Android Studio originally put there, and
-leave everything else alone.
+`build.gradle.kts` (AGP 9.4.1 / Kotlin 2.4.20) need Gradle 9 or newer — CI uses
+9.7.1. In Android Studio: **File → Project Structure → Project → Gradle
+Version**, set 9.7.1. The SDK Manager also needs **Android SDK Platform 37.2**:
+the current Compose libraries compile against it, though the app still targets
+API 36.
+
+AGP 9 compiles Kotlin itself, so `app/build.gradle.kts` does **not** apply
+`org.jetbrains.kotlin.android` — applying it there is an error. The root file
+declares it only to pin the Kotlin version.
 
 ## 5. Install on the phone
 
@@ -230,6 +239,25 @@ ceiling and the tile starts showing what's actually overhead.
 Aircraft reporting no altitude at all are kept regardless. An unknown altitude
 isn't evidence of a high one, and dropping them would lose exactly the low, slow
 GA traffic the ceiling exists to surface.
+
+### Your own receiver
+
+If you run [sdr_windows](https://github.com/Blueangelman36/sdr_windows) — or
+anything else that serves dump1090's `aircraft.json` — put its address and
+dashboard token here, and the plane tile asks it before anyone else. When it
+hears nothing within the search radius, adsb.fi is asked as usual: a receiver
+at a window in a valley hears what is overhead and little else, and "nothing
+heard here" is not "nothing there".
+
+- **The address is HTTPS.** Android refuses plain HTTP, and `tailscale serve
+  --bg 8480` on the station's PC gives it a real certificate at
+  `https://<machine>.<tailnet>.ts.net`. Type that; `/data/aircraft.json` is added.
+- **dump1090 has no distance or bearing**, so they are worked out from each
+  aircraft's position. A position older than a minute is not used.
+- **The token** is left out of Android's cloud backup and device transfer, and
+  a refused one is reported as refused rather than as an empty sky.
+- If the station can't be reached, **Diagnostics** shows `station: …` as the
+  last error, and the tile carries on from adsb.fi.
 
 ### Temperature
 
@@ -415,6 +443,19 @@ a jet doing 450 knots can be 100+ nm from where the widget says it is. Tap befor
 you trust it.
 
 ---
+
+## Tests
+
+```bash
+gradle testDebugUnitTest
+```
+
+JVM unit tests over the logic that can go wrong without a phone: picking the
+nearest aircraft from either feed shape, the station address, route
+plausibility and timing, flight category and METAR text, and version
+comparison. CI runs them before every build, and runs the
+[fence](https://github.com/Blueangelman36/chesterton) check over the recorded
+reasons in `.fence/`.
 
 ## Things you might want to change
 

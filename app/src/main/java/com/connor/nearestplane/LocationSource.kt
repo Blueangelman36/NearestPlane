@@ -113,6 +113,9 @@ object LocationSource {
             start()
                 .addOnSuccessListener { cont.resume(it) }
                 .addOnFailureListener { cont.resume(null) }
+                // Without this a cancelled Task resumes nothing, and the
+                // refresh hangs until WorkManager kills it ten minutes later.
+                .addOnCanceledListener { cont.resume(null) }
         }
     }.getOrNull()
 

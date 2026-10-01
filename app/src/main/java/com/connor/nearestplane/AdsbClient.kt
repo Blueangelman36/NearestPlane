@@ -14,6 +14,27 @@ import java.util.Locale
  * close but has no `dst` field — you'd compute distance yourself with the
  * haversine in AviationWeatherClient.
  */
+/**
+ * A receiver of your own: sdr_windows, or anything serving dump1090's
+ * aircraft.json. [url] is the full address of that file.
+ */
+data class Station(val url: String, val token: String)
+
+/**
+ * What a person types, as the address of an aircraft.json — or null when it
+ * cannot be one. HTTPS only: Android refuses plain HTTP by default, and
+ * Tailscale Serve gives a station a real certificate for exactly this.
+ */
+fun normalizeStationUrl(input: String): String? {
+    val raw = input.trim().let { if ("://" in it) it else "https://$it" }
+    val uri = runCatching { java.net.URI(raw) }.getOrNull() ?: return null
+    if (!uri.scheme.equals("https", ignoreCase = true) || uri.host.isNullOrBlank()) return null
+    val path = uri.path.orEmpty().trimEnd('/')
+    val file = if (path.endsWith(".json")) path else "$path/data/aircraft.json"
+    val port = if (uri.port > 0) ":${uri.port}" else ""
+    return "https://${uri.host}$port$file"
+}
+
 object AdsbClient {
 
     /**
@@ -46,24 +67,44 @@ object AdsbClient {
      * [maxAltitudeFt] drops high cruisers. Without it, anyone living under an
      * airway gets the same airliner at FL380 forty miles away every refresh,
      * which is technically the nearest aircraft and of no interest at all.
+     *
+     * [station], when set, is asked first: a receiver of your own sees what is
+     * overhead seconds sooner than an aggregator, with nothing sent anywhere.
+     * If it hears nothing in range the aggregators are asked anyway — a
+     * receiver at a window in a valley hears little, and "nothing heard here"
+     * is not "nothing there". Its failures go to [onStationError] rather than
+     * failing the refresh, for the same reason.
      */
     suspend fun nearest(
         lat: Double,
         lon: Double,
         radiusNm: Int = 50,
         includeGround: Boolean = false,
-        maxAltitudeFt: Int? = null
+        maxAltitudeFt: Int? = null,
+        station: Station? = null,
+        onStationError: suspend (String) -> Unit = {}
     ): Aircraft? = withContext(Dispatchers.IO) {
+        if (station != null) {
+            try {
+                pick(get(station.url, station.token), lat, lon, radiusNm, includeGround, maxAltitudeFt)
+                    ?.let { return@withContext it }
+            } catch (e: Exception) {
+                onStationError(e.message ?: e.javaClass.simpleName)
+            }
+        }
+
         var failure: Exception? = null
         for (endpoint in ENDPOINTS) {
             try {
                 // A successful fetch is authoritative, including when it finds
                 // nothing: an empty sky is an answer, not a reason to ask again.
-                return@withContext pick(
-                    fetch(endpoint, lat, lon, radiusNm),
-                    includeGround,
-                    maxAltitudeFt
+                val url = endpoint.format(
+                    Locale.US,
+                    "%.4f".format(Locale.US, lat),
+                    "%.4f".format(Locale.US, lon),
+                    radiusNm
                 )
+                return@withContext pick(get(url), lat, lon, radiusNm, includeGround, maxAltitudeFt)
             } catch (e: Exception) {
                 failure = e
             }
@@ -71,25 +112,25 @@ object AdsbClient {
         throw failure ?: IllegalStateException("No ADS-B endpoint configured")
     }
 
-    private fun fetch(endpoint: String, lat: Double, lon: Double, radiusNm: Int): String {
-        val url = URL(
-            endpoint.format(
-                Locale.US,
-                "%.4f".format(Locale.US, lat),
-                "%.4f".format(Locale.US, lon),
-                radiusNm
-            )
-        )
+    private fun get(address: String, token: String? = null): String {
+        val url = URL(address)
         return (url.openConnection() as HttpURLConnection).run {
             requestMethod = "GET"
             connectTimeout = TIMEOUT_MS
             readTimeout = TIMEOUT_MS
             // Aggregators ask that clients identify themselves.
             setRequestProperty("User-Agent", "NearestPlaneWidget/1.0")
+            token?.takeIf { it.isNotBlank() }?.let { setRequestProperty("Authorization", "Bearer $it") }
+            // A station that refuses a token may redirect to its sign-in page;
+            // following that would read an HTML form as an empty sky. Only the
+            // station: an aggregator that moves an endpoint should still work.
+            if (token != null) instanceFollowRedirects = false
             try {
                 if (responseCode !in 200..299) {
                     // Name the host: "HTTP 403" alone doesn't say who refused.
-                    throw IllegalStateException("${url.host} returned HTTP $responseCode")
+                    val hint = if (token != null && responseCode in listOf(301, 302, 401, 403))
+                        " (check the station token)" else ""
+                    throw IllegalStateException("${url.host} returned HTTP $responseCode$hint")
                 }
                 inputStream.bufferedReader().use { it.readText() }
             } finally {
@@ -98,20 +139,51 @@ object AdsbClient {
         }
     }
 
-    private fun pick(body: String, includeGround: Boolean, maxAltitudeFt: Int?): Aircraft? {
+    /**
+     * The nearest qualifying aircraft in an ADSBExchange-v2 or dump1090 body.
+     *
+     * Aggregators measure distance and bearing from the point asked about
+     * (`dst`, `dir`). dump1090 — and so a receiver of your own — does not, so
+     * where those are absent they are worked out from the aircraft's position.
+     */
+    internal fun pick(
+        body: String,
+        fromLat: Double,
+        fromLon: Double,
+        radiusNm: Int,
+        includeGround: Boolean,
+        maxAltitudeFt: Int?
+    ): Aircraft? {
         val root = JSONObject(body)
         val list = root.optJSONArray("ac") ?: root.optJSONArray("aircraft") ?: return null
 
         return (0 until list.length())
             .mapNotNull { list.optJSONObject(it) }
-            .map { parseAircraft(it) }
+            .map { measured(parseAircraft(it), fromLat, fromLon, it) }
             .filter { includeGround || !it.onGround }
             // An unreported altitude is not evidence of a high one, and
             // dropping those would lose exactly the close GA traffic the
             // ceiling exists to surface.
             .filter { maxAltitudeFt == null || (it.altitudeFt ?: 0) <= maxAltitudeFt }
-            .filter { it.distanceNm != null }
+            .filter { it.distanceNm != null && it.distanceNm <= radiusNm }
             .minByOrNull { it.distanceNm!! }
+    }
+
+    /**
+     * Fill in distance and bearing where the feed did not. A position older
+     * than a minute is not used: dump1090 keeps an aircraft's last position
+     * long after it was heard, and "0.4 nm overhead" from three minutes ago is
+     * a different place at 250 knots.
+     */
+    private fun measured(a: Aircraft, fromLat: Double, fromLon: Double, o: JSONObject): Aircraft {
+        if (a.distanceNm != null) return a
+        val lat = a.lat ?: return a
+        val lon = a.lon ?: return a
+        if ((o.optDoubleOrNull("seen_pos") ?: 0.0) > 60.0) return a
+        return a.copy(
+            distanceNm = RouteMath.nmBetween(fromLat, fromLon, lat, lon),
+            bearingDeg = RouteMath.bearingTo(fromLat, fromLon, lat, lon)
+        )
     }
 
     private fun parseAircraft(o: JSONObject): Aircraft {

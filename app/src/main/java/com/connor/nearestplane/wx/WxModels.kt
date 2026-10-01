@@ -197,6 +197,8 @@ fun decodeWeather(raw: String): String {
             out.append(phenomena[rest.take(2)]).append(" ")
             rest = rest.drop(2)
         }
-        out.toString().trim().ifBlank { group }
+        // "VCSH" is showers in the vicinity with no precipitation named, and
+        // read "nearby showers of" until the dangling "of" was dropped.
+        out.toString().trim().removeSuffix(" of").ifBlank { group }
     }
 }
