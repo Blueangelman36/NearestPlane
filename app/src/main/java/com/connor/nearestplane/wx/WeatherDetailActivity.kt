@@ -67,7 +67,9 @@ class WeatherDetailActivity : ComponentActivity() {
                     error = "No GPS fix yet. Step outside or try again in a moment."
                     return
                 }
-                val m = AviationWeatherClient.nearestMetar(fix.lat, fix.lon)
+                val m = AviationWeatherClient.nearestMetar(
+                    fix.lat, fix.lon, preferForecast = AppSettings.preferForecast(this@WeatherDetailActivity)
+                )
                 if (m == null) {
                     error = "No reporting station within about 45 nm."
                     return

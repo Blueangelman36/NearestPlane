@@ -102,6 +102,7 @@ class MainActivity : ComponentActivity() {
             .collectAsState(initial = LocationMode.DEVICE)
         val pin by AppSettings.pinFlow(activity).collectAsState(initial = null)
         val station by AppSettings.stationFlow(activity).collectAsState(initial = null)
+        val preferForecast by AppSettings.preferForecastFlow(activity).collectAsState(initial = false)
         var stationUrl by remember { mutableStateOf("") }
         var stationToken by remember { mutableStateOf("") }
         var stationError by remember { mutableStateOf<String?>(null) }
@@ -512,6 +513,31 @@ class MainActivity : ComponentActivity() {
                     Text(
                         "Larger text may clip on a small tile — drag the widget's edge to " +
                             "resize it if that happens.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                SectionCard("Weather station") {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(false to "Nearest airport", true to "Nearest with a forecast")
+                            .forEach { (option, label) ->
+                                FilterChip(
+                                    selected = preferForecast == option,
+                                    onClick = {
+                                        scope.launch {
+                                            AppSettings.setPreferForecast(activity, option)
+                                            WxRefreshWorker.refreshNow(activity)
+                                        }
+                                    },
+                                    label = { Text(label) }
+                                )
+                            }
+                    }
+                    Text(
+                        "Only larger airports issue a TAF, so the nearest station often has " +
+                            "today's weather but no forecast. \"Nearest with a forecast\" skips " +
+                            "those for the nearest one that has both, still within about 45 nm. " +
+                            "If none in range does, the tile uses the nearest airport anyway.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }

@@ -35,9 +35,11 @@ object AviationWeatherClient {
     suspend fun nearestMetar(
         lat: Double,
         lon: Double,
-        boxDeg: Double = 0.75
+        boxDeg: Double = 0.75,
+        preferForecast: Boolean = false
     ): Metar? = withContext(Dispatchers.IO) {
-        boxesAround(lat, lon, boxDeg)
+        val boxes = boxesAround(lat, lon, boxDeg)
+        val reports = boxes
             .flatMap { bbox ->
                 val arr = JSONArray(get("$BASE/metar?bbox=$bbox&format=json&hours=3"))
                 (0 until arr.length()).mapNotNull { parseMetar(arr.getJSONObject(it), lat, lon) }
@@ -45,8 +47,30 @@ object AviationWeatherClient {
             // Several hours of reports come back — keep the newest per station.
             .groupBy { it.stationId }
             .mapNotNull { (_, reports) -> reports.maxByOrNull { it.observedEpoch ?: 0L } }
-            .minByOrNull { it.distanceNm ?: Double.MAX_VALUE }
+        // Asked only when wanted, and a failure here costs the preference, not the tile.
+        val forecasting = if (preferForecast) runCatching { tafStations(boxes) }.getOrNull() else null
+        chooseStation(reports, forecasting)
     }
+
+    /**
+     * The nearest report — or, given the stations that issue a TAF, the nearest
+     * of those. When none in range does, the nearest of all: a tile with today's
+     * weather and no forecast beats a tile with nothing.
+     */
+    internal fun chooseStation(reports: List<Metar>, forecasting: Set<String>?): Metar? {
+        val byDistance = reports.sortedBy { it.distanceNm ?: Double.MAX_VALUE }
+        if (forecasting != null) byDistance.firstOrNull { it.stationId in forecasting }?.let { return it }
+        return byDistance.firstOrNull()
+    }
+
+    /** Stations in these boxes that currently issue a TAF. One request per box, like the METARs. */
+    private fun tafStations(boxes: List<String>): Set<String> = boxes.flatMap { bbox ->
+        val body = get("$BASE/taf?bbox=$bbox&format=json")
+        if (body.isBlank()) emptyList() else {
+            val arr = JSONArray(body)
+            (0 until arr.length()).mapNotNull { arr.getJSONObject(it).optString("icaoId", "").ifBlank { null } }
+        }
+    }.toSet()
 
     /**
      * The API wants minLat,minLon,maxLat,maxLon. Three things make that more

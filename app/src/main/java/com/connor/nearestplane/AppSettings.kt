@@ -3,6 +3,7 @@ package com.connor.nearestplane
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -106,6 +107,7 @@ object AppSettings {
     private val PIN_LABEL = stringPreferencesKey("pin_label")
     private val PIN_LAT = doublePreferencesKey("pin_lat")
     private val PIN_LON = doublePreferencesKey("pin_lon")
+    private val PREFER_FORECAST = booleanPreferencesKey("prefer_forecast_station")
 
     data class Appearance(
         val background: WidgetBackground = WidgetBackground.DYNAMIC,
@@ -181,6 +183,23 @@ object AppSettings {
 
     suspend fun setCeiling(context: Context, v: AltitudeCeiling) {
         context.settingsStore.edit { it[CEILING] = v.name }
+    }
+
+    // ---- which station the weather tile reports ----
+
+    /**
+     * Off by default: the nearest station is the truest "weather here". On, the
+     * tile skips small fields that don't issue a TAF for the nearest one that
+     * does, so a forecast is always there to open.
+     */
+    suspend fun preferForecast(context: Context): Boolean =
+        runCatching { context.settingsStore.data.first()[PREFER_FORECAST] ?: false }.getOrDefault(false)
+
+    fun preferForecastFlow(context: Context): Flow<Boolean> =
+        context.settingsStore.data.map { it[PREFER_FORECAST] ?: false }
+
+    suspend fun setPreferForecast(context: Context, v: Boolean) {
+        context.settingsStore.edit { it[PREFER_FORECAST] = v }
     }
 
     // ---- where "here" is ----
