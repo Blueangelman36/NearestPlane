@@ -98,14 +98,20 @@ jobs:
 
   fences:
     # The recorded reasons in .fence/. Kotlin is read by fence's Rust build,
-    # pinned to a commit; --strict fails on a removed statement and on any
-    # note that build cannot compare.
+    # pinned to a release by its commit; --strict fails on a removed statement
+    # and on any note that build cannot compare. On a pull request it also
+    # quotes the reasons the change touches in one comment, which is all the
+    # write access here is for.
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
-      - uses: Blueangelman36/chesterton@851632f80c0b326dd0dabb11c50e2467bd6e20a9
+      - uses: Blueangelman36/chesterton@a5842f13016ae1fc0790442872fa3bd97f4196df # v0.1.0
         with:
           implementation: rust
+          comment-on-pr: true
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')

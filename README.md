@@ -466,7 +466,8 @@ nearest aircraft from either feed shape, the station address, route
 plausibility and timing, flight category and METAR text, and version
 comparison. CI runs them before every build, and runs the
 [fence](https://github.com/Blueangelman36/chesterton) check over the recorded
-reasons in `.fence/`.
+reasons in `.fence/`. On a pull request, fence also quotes the reasons the change
+touches in one comment, so a reviewer sees them without running anything.
 
 ## Things you might want to change
 
