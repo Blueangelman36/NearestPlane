@@ -1,0 +1,22 @@
+# Weekly pull requests when a dependency has a new version. Minor and patch
+# updates arrive grouped; a major version arrives alone, because that is the one
+# that can need a code change. CI builds the APK and runs the tests on each.
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      gradle-minor-and-patch:
+        update-types: [minor, patch]
+
+  # Includes chesterton, pinned to a commit: Dependabot moves that pin when it
+  # tags a new release.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

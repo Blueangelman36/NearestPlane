@@ -33,10 +33,13 @@ Every push to `main` builds an APK in GitHub Actions, and every `v*` tag turns
 one into a release. On the phone, open this repo's **Releases** page, tap the
 `.apk`, and allow installs from your browser when Android asks.
 
-To cut a release:
+To cut a release, in a browser: **Releases → Draft a new release → Choose a tag**,
+type the new tag (`v1.10` for this version), **Create new tag on publish**, target
+`main`, **Publish release**. The APK attaches itself a few minutes later. Or from a
+terminal:
 
 ```
-git tag v1.9 && git push origin v1.9
+git tag v1.10 && git push origin v1.10
 ```
 
 The tag has to match `versionName` in `app/build.gradle.kts`, and CI refuses the
@@ -259,6 +262,14 @@ heard here" is not "nothing there".
 - If the station can't be reached, **Diagnostics** shows `station: …` as the
   last error, and the tile carries on from adsb.fi.
 
+### Weather station
+
+**Nearest airport** (the default) or **Nearest with a forecast**. Only larger
+airports issue a TAF, so the nearest station often reports today's weather but
+has no forecast to open. The second option skips those for the nearest station
+that issues both, still within about 45 nm, and falls back to the nearest
+airport if none in range does. Changing it refreshes the weather tile at once.
+
 ### Temperature
 
 Celsius (default) or Fahrenheit, on the METAR tile only. Celsius goes unmarked
@@ -459,9 +470,10 @@ reasons in `.fence/`.
 
 ## Things you might want to change
 
-Search radius and altitude ceiling used to live here. They're settings now —
-see **Plane search** above — because they're the two knobs that decide whether
-the tile is interesting, and needing a rebuild to turn them was absurd.
+Search radius, altitude ceiling, your own receiver and "always show a forecast"
+used to live here. They're settings now — see **Plane search**, **Your own
+receiver** and **Weather station** above — because needing a rebuild to turn the
+knobs that decide whether a tile is interesting was absurd.
 
 - **More radius or ceiling options** — the `SearchRadius` and `AltitudeCeiling`
   enums in `AppSettings.kt`. Adding a value is one line and it appears in the
@@ -471,17 +483,10 @@ the tile is interesting, and needing a rebuild to turn them was absurd.
   nautical miles, not in degrees of longitude — `boxesAround` widens the box
   as you go north to keep it square, since 0.75° east-west is 45 nm at the
   equator but 22 in Fairbanks.
-- **Always get a TAF** — right now the nearest station wins even if it's a small
-  field that doesn't issue one. Filter to stations that returned a TAF if you'd
-  rather always have a forecast.
 - **Different ADS-B source** — `ENDPOINTS` in `AdsbClient.kt`, tried in order.
   Add or reorder freely; they all return the ADSBExchange v2 shape, with the
   one wrinkle that adsb.fi names the aircraft list `aircraft` and adsb.lol
   names it `ac`. The client accepts either.
-- **Point at your own Pi** — put your dump1090 host's
-  `/data/aircraft.json`. Note dump1090 has no `dst` or `dir` fields, so you'd
-  compute distance and bearing from lat/lon yourself before sorting. There's
-  already a haversine in `AviationWeatherClient` you can lift.
 - **Refresh cadence** — the interval in each `schedulePeriodic`. Tap-to-refresh
   stays instant regardless.
 - **More weather decoding** — `decodeWeather` in `WxModels.kt` covers the standard

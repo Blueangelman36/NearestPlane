@@ -57,7 +57,9 @@ class WxRefreshWorker(
                 return Result.retry()
             }
 
-            val metar = AviationWeatherClient.nearestMetar(fix.lat, fix.lon)
+            val metar = AviationWeatherClient.nearestMetar(
+                fix.lat, fix.lon, preferForecast = AppSettings.preferForecast(context)
+            )
             if (metar == null) {
                 write(context) {
                     it[WxState.STATUS] = "empty"
