@@ -204,7 +204,7 @@ class MainActivity : ComponentActivity() {
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = {
-                                openUrl(available.apkUrl ?: available.pageUrl)
+                                openUrl(available.apkUrl)
                             }) { Text("Download") }
                             OutlinedButton(onClick = { openUrl(available.pageUrl) }) {
                                 Text("What changed")

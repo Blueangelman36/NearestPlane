@@ -33,18 +33,25 @@ Every push to `main` builds an APK in GitHub Actions, and every `v*` tag turns
 one into a release. On the phone, open this repo's **Releases** page, tap the
 `.apk`, and allow installs from your browser when Android asks.
 
-To cut a release, in a browser: **Releases → Draft a new release → Choose a tag**,
-type the new tag (`v1.10` for this version), **Create new tag on publish**, target
-`main`, **Publish release**. The APK attaches itself a few minutes later. Or from a
-terminal:
+To cut a release:
 
-```
-git tag v1.10 && git push origin v1.10
-```
+1. **Change the version first.** In `app/build.gradle.kts`, set `versionName` to
+   the new number and add one to `versionCode`, through a pull request, and merge
+   it. The tag has to match `versionName`.
+2. In a browser: **Releases → Draft a new release → Choose a tag**, type the new
+   tag (`v1.11` for this version), **Create new tag on publish**, target `main`,
+   leave the description empty (the workflow writes it), **Publish release**. The
+   APK attaches itself a few minutes later. Or from a terminal:
 
-The tag has to match `versionName` in `app/build.gradle.kts`, and CI refuses the
-release when it does not: an APK built from a mismatch would find its own tag on
-the releases page and announce itself as an update, forever.
+   ```
+   git tag v1.11 && git push origin v1.11
+   ```
+
+CI refuses a release whose tag doesn't match `versionName`: an APK built from a
+mismatch would find its own tag on the releases page and announce itself as an
+update, forever. A refused release has no APK, only GitHub's source-code
+downloads. Delete it and its tag (**Releases → 🗑**, then **Tags → ⋯ → Delete
+tag**), do step 1, and publish again.
 
 If you'd rather not tag, the same APK is on the **Actions** tab under the latest
 run, as the `nearest-plane-apk` artifact — though workflow artifacts expire and
@@ -57,10 +64,12 @@ nothing will mention that a new version exists unless something goes looking.
 
 The app looks. It checks the releases API when you open it, and shows a card at
 the top of the settings screen when there's something newer, with the version
-you're on in a card at the bottom. This needs no credentials because the repo is
-public — nothing is embedded in the APK. Were the repo private again, this would
-have to be removed rather than ship a token that anyone could extract from the
-package.
+you're on in a card at the bottom. It only offers a release that has its APK
+attached, so one whose build is still running, or was refused, is passed over
+until it has one: **Download** always means the APK, never a page of source
+code. This needs no credentials because the repo is public — nothing is embedded
+in the APK. Were the repo private again, this would have to be removed rather
+than ship a token that anyone could extract from the package.
 
 For proper background updates, [Obtainium](https://github.com/ImranR98/Obtainium)
 watches releases pages and installs from them. Point it at this repo's URL.
@@ -463,10 +472,10 @@ gradle testDebugUnitTest
 
 JVM unit tests over the logic that can go wrong without a phone: picking the
 nearest aircraft from either feed shape, the station address, route
-plausibility and timing, flight category and METAR text, and version
-comparison. CI runs them before every build, and runs the
-[fence](https://github.com/Blueangelman36/chesterton) check over the recorded
-reasons in `.fence/`. On a pull request, fence also quotes the reasons the change
+plausibility and timing, flight category and METAR text, version comparison,
+and which release the update check offers. CI runs them before every build, and
+runs the [fence](https://github.com/Blueangelman36/chesterton) check over the
+recorded reasons in `.fence/`. On a pull request, fence also quotes the reasons the change
 touches in one comment, so a reviewer sees them without running anything.
 
 ## Things you might want to change

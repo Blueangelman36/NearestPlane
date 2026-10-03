@@ -2,17 +2,18 @@ package com.connor.nearestplane
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-/** The newest release GitHub knows about. */
+/** The newest release a phone can actually install. */
 data class Release(
     /** Numeric version, tag with its "v" stripped: "1.6". */
     val version: String,
-    /** Direct link to the APK, when the release has one attached. */
-    val apkUrl: String?,
-    /** The release page, as a fallback and for the notes. */
+    /** Direct link to the APK. A release without one is never offered. */
+    val apkUrl: String,
+    /** The release page, for its notes ("What changed"). */
     val pageUrl: String
 )
 
@@ -27,13 +28,19 @@ data class Release(
  */
 object UpdateCheck {
 
-    private const val LATEST =
-        "https://api.github.com/repos/Blueangelman36/NearestPlane/releases/latest"
+    // The list, not /releases/latest. "Latest" is only the newest published
+    // release, and a release has no APK while its build runs, or at all when
+    // the build refuses it (a tag that disagrees with versionName). Offered
+    // then, Download opened a page whose only files were the source code,
+    // which needs Android Studio to become an app. Drafts never appear here
+    // without credentials, and there are none in this request.
+    private const val RELEASES =
+        "https://api.github.com/repos/Blueangelman36/NearestPlane/releases?per_page=10"
 
     private const val TIMEOUT_MS = 10_000
 
     suspend fun latest(): Release? = withContext(Dispatchers.IO) {
-        val body = (URL(LATEST).openConnection() as HttpURLConnection).run {
+        val body = (URL(RELEASES).openConnection() as HttpURLConnection).run {
             requestMethod = "GET"
             connectTimeout = TIMEOUT_MS
             readTimeout = TIMEOUT_MS
@@ -47,16 +54,35 @@ object UpdateCheck {
             }
         }
 
-        val o = JSONObject(body)
-        val tag = o.optString("tag_name", "").ifBlank { return@withContext null }
+        newestInstallable(body)
+    }
+
+    /**
+     * The highest-versioned release with an APK attached, passing over drafts
+     * and pre-releases as /releases/latest did. Highest by version rather than
+     * first in the list, which is ordered by when each release was created: an
+     * older version published late would otherwise outrank a newer one.
+     */
+    internal fun newestInstallable(json: String): Release? {
+        val list = JSONArray(json)
+        return (0 until list.length())
+            .mapNotNull { list.optJSONObject(it) }
+            .filterNot { it.optBoolean("draft") || it.optBoolean("prerelease") }
+            .mapNotNull(::installable)
+            .reduceOrNull { best, next -> if (isNewer(next.version, best.version)) next else best }
+    }
+
+    private fun installable(o: JSONObject): Release? {
+        val tag = o.optString("tag_name", "").ifBlank { return null }
         val assets = o.optJSONArray("assets")
         val apk = (0 until (assets?.length() ?: 0))
             .mapNotNull { assets?.optJSONObject(it) }
             .firstOrNull { it.optString("name", "").endsWith(".apk", ignoreCase = true) }
             ?.optString("browser_download_url", "")
             ?.ifBlank { null }
+            ?: return null
 
-        Release(
+        return Release(
             version = tag.removePrefix("v").removePrefix("V"),
             apkUrl = apk,
             pageUrl = o.optString("html_url", "").ifBlank {
