@@ -1,0 +1,53 @@
+{
+  "id": "b0518932",
+  "reason": "The network constraint on the refresh-now job is not redundant. refreshNow() is also queued from the background (the widget refresh button and its updatePeriodMillis backup), and Android only guarantees a background job the network when it declares that it needs it. Without this those refreshes failed with \"Unable to resolve host\" and the tile said offline, while the same refresh from the open app worked: seen on a real phone in v1.11.",
+  "source": null,
+  "author": "Claude",
+  "created": "2026-10-06",
+  "snippet": "internal fun oneShot(): OneTimeWorkRequest =\n    OneTimeWorkRequestBuilder<WxRefreshWorker>()\n        .setConstraints(ONLINE)\n        .build()",
+  "anchors": {
+    "5": {
+      "version": 5,
+      "path": "app/src/main/java/com/connor/nearestplane/wx/WxRefreshWorker.kt",
+      "scope": "WxRefreshWorker.Companion",
+      "kind": "function_declaration",
+      "line": 204,
+      "exact": "cd18027077976a1d",
+      "shape": "a2a10a6a9cfb9e90",
+      "dupes": {
+        "exact": 1,
+        "shape": 1,
+        "other_exact": 0,
+        "other_shape": 0,
+        "far_exact": 0,
+        "far_shape": 0
+      },
+      "rival": 0.22115384615384615,
+      "tokens": [
+        "internal",
+        "fun",
+        "oneShot",
+        "(",
+        ")",
+        ":",
+        "OneTimeWorkRequest",
+        "=",
+        "OneTimeWorkRequestBuilder",
+        "<",
+        "WxRefreshWorker",
+        ">",
+        "(",
+        ")",
+        ".",
+        "setConstraints",
+        "(",
+        "ONLINE",
+        ")",
+        ".",
+        "build",
+        "(",
+        ")"
+      ]
+    }
+  }
+}

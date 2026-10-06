@@ -10,6 +10,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -154,17 +155,26 @@ class RefreshWorker(
         private const val ONE_SHOT_NAME = "nearest-plane-now"
 
         /**
+         * Declared by the refresh-now job as much as the periodic one. The
+         * refresh-now job is also queued from the background: the widget's
+         * refresh button, and its updatePeriodMillis backup. Android only
+         * guarantees a background job the network when it declares that it
+         * needs it, so without this the fetch failed with "Unable to resolve
+         * host" and the tile said offline, while the same refresh from the
+         * open app worked.
+         */
+        private val ONLINE = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        /**
          * UPDATE, not KEEP. With KEEP, the job enqueued by an older build lives
          * forever and every change made here is silently ignored — including
          * this one, until the app is reinstalled.
          */
         fun schedulePeriodic(context: Context) {
             val request = PeriodicWorkRequestBuilder<RefreshWorker>(15, TimeUnit.MINUTES)
-                .setConstraints(
-                    Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
-                        .build()
-                )
+                .setConstraints(ONLINE)
                 .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
                 .build()
 
@@ -179,10 +189,14 @@ class RefreshWorker(
             WorkManager.getInstance(context).enqueueUniqueWork(
                 ONE_SHOT_NAME,
                 ExistingWorkPolicy.REPLACE,
-                OneTimeWorkRequestBuilder<RefreshWorker>()
-                    .setBackoffCriteria(BackoffPolicy.LINEAR, 15, TimeUnit.SECONDS)
-                    .build()
+                oneShot()
             )
         }
+
+        internal fun oneShot(): OneTimeWorkRequest =
+            OneTimeWorkRequestBuilder<RefreshWorker>()
+                .setConstraints(ONLINE)
+                .setBackoffCriteria(BackoffPolicy.LINEAR, 15, TimeUnit.SECONDS)
+                .build()
     }
 }
