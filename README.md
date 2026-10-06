@@ -387,6 +387,13 @@ Both widget XML files say so where someone would go to change the number.
 Both are re-asserted every time you open the app, so a dropped schedule
 repairs itself.
 
+Every refresh job declares that it needs the network: the periodic ones, and
+the refresh-now job that the app, the widgets' refresh buttons and the backup
+timer all queue. While the app isn't on screen, Android only guarantees a job
+the network when the job declares it. Before v1.12 the refresh-now job left it
+out, so the widget buttons and the backup timer failed with "Unable to resolve
+host" while the same refresh from the open app worked.
+
 **Failures are isolated.** Only the aircraft or METAR fetch itself can fail a
 refresh. The route and airframe lookups are enrichment: if adsbdb is down or
 slow, you lose the route line and the full type name, never the tile.
@@ -473,9 +480,10 @@ gradle testDebugUnitTest
 JVM unit tests over the logic that can go wrong without a phone: picking the
 nearest aircraft from either feed shape, the station address, route
 plausibility and timing, flight category and METAR text, version comparison,
-and which release the update check offers. CI runs them before every build, and
-runs the [fence](https://github.com/Blueangelman36/chesterton) check over the
-recorded reasons in `.fence/`. On a pull request, fence also quotes the reasons the change
+which release the update check offers, and that every refresh job declares the
+network. CI runs them before every build, and runs the
+[fence](https://github.com/Blueangelman36/chesterton) check over the recorded
+reasons in `.fence/`. On a pull request, fence also quotes the reasons the change
 touches in one comment, so a reviewer sees them without running anything.
 
 ## Things you might want to change
@@ -547,6 +555,12 @@ Open the app once; `MainActivity` schedules both workers on launch.
 **"No location set" after granting** — you granted foreground only, and the app
 is in device mode. See step 6, or switch to a fixed place, which needs no
 background permission at all.
+
+**The widget's refresh button says "offline", but refreshing in the app works**
+— fixed in v1.12; update from the app's **Version** card. Diagnostics showed
+`Unable to resolve host` for these: the refresh-now job didn't declare that it
+needed the network, so Android could run it without one while the app was off
+screen.
 
 **Widgets only update when you open the app** — this is the common one, and
 it's battery optimisation, not a bug in the fetch. Open the app: if background
