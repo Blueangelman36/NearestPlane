@@ -2,6 +2,7 @@ package com.connor.nearestplane.wx
 
 import android.content.Context
 import androidx.datastore.preferences.core.MutablePreferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.glance.appwidget.GlanceAppWidgetManager
@@ -20,6 +21,7 @@ import androidx.work.WorkerParameters
 import com.connor.nearestplane.AppSettings
 import com.connor.nearestplane.Diagnostics
 import com.connor.nearestplane.LocationSource
+import com.connor.nearestplane.PositionSource
 import java.util.concurrent.TimeUnit
 
 object WxState {
@@ -33,6 +35,7 @@ object WxState {
     val STATUS = stringPreferencesKey("wx_status")
     val STALE_NOTE = stringPreferencesKey("wx_stale_note")
     val UPDATED_AT = longPreferencesKey("wx_updated_at")
+    val PINNED = booleanPreferencesKey("wx_pinned")       // see WidgetState.PINNED
 }
 
 class WxRefreshWorker(
@@ -57,6 +60,7 @@ class WxRefreshWorker(
                 Diagnostics.noteError(context, "weather", "No position available")
                 return Result.retry()
             }
+            Diagnostics.notePosition(context, "weather", fix.describe)
 
             val metar = AviationWeatherClient.nearestMetar(
                 fix.lat, fix.lon, preferForecast = AppSettings.preferForecast(context)
@@ -67,6 +71,7 @@ class WxRefreshWorker(
                     it[WxState.STATION] = "No station"
                     it[WxState.SUMMARY] = "Nothing reporting within ~45 nm"
                     it[WxState.STALE_NOTE] = fix.staleNote.orEmpty()
+                    it[WxState.PINNED] = fix.source == PositionSource.FIXED
                     it[WxState.UPDATED_AT] = System.currentTimeMillis()
                 }
                 Diagnostics.noteOk(context, "weather")
@@ -94,6 +99,7 @@ class WxRefreshWorker(
                 // "Nearest station" is only true relative to where you are, so
                 // an old position quietly undermines the whole tile.
                 p[WxState.STALE_NOTE] = fix.staleNote.orEmpty()
+                p[WxState.PINNED] = fix.source == PositionSource.FIXED
                 p[WxState.UPDATED_AT] = System.currentTimeMillis()
             }
             Diagnostics.noteOk(context, "weather")

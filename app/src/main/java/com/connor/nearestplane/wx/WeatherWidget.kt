@@ -104,18 +104,30 @@ class WeatherWidget : GlanceAppWidget() {
                             )
                         }
                         Spacer(GlanceModifier.width(6.dp))
-                        val note = prefs[WxState.STALE_NOTE].orEmpty()
-                            .ifBlank { ageLabel(prefs[WxState.UPDATED_AT] ?: 0L) }
-                        Line(note, 13, look, muted = true, maxLines = 1)
+                        // Only the age shares this row now. The note used to sit
+                        // here, after a 23sp station name, and at larger text it
+                        // was the part that got cut: a tile could stay a day at an
+                        // airport you had left with nothing visible saying so.
+                        val age = ageLabel(prefs[WxState.UPDATED_AT] ?: 0L)
+                        val ageLine = if (prefs[WxState.PINNED] == true) {
+                            listOf("pinned", age).filter { it.isNotBlank() }.joinToString(" · ")
+                        } else age
+                        Line(ageLine, 13, look, muted = true, maxLines = 1)
                     }
+
+                    // A note gets a line of its own. "location 26h old" means the
+                    // airport above may be the wrong one, which outranks the second
+                    // line of raw METAR it displaces.
+                    val note = prefs[WxState.STALE_NOTE].orEmpty()
+                    Line(note, 13, look, FontWeight.Medium, muted = true, maxLines = 1)
 
                     // Row 2: decoded summary.
                     Line(prefs[WxState.SUMMARY].orEmpty(), 16, look, FontWeight.Medium, maxLines = 1)
 
-                    // Row 3: raw METAR, capped at two lines instead of three.
+                    // Row 3: raw METAR, two lines, or one when a note took the room.
                     Text(
                         text = prefs[WxState.RAW_METAR].orEmpty(),
-                        maxLines = 2,
+                        maxLines = if (note.isBlank()) 2 else 1,
                         style = TextStyle(
                             fontSize = WidgetPalette.size(13, look).sp,
                             fontFamily = FontFamily.Monospace,
