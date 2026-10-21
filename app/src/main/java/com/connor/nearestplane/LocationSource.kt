@@ -5,12 +5,14 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
+import android.os.Build
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.Task
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.util.Locale
 import kotlin.coroutines.resume
 
 /** Which tier a position came from, best first. */
@@ -36,10 +38,52 @@ data class Position(
             // A pinned place isn't a fix and can't go stale.
             if (source == PositionSource.FIXED) return null
             val age = ageMinutes
-                ?: return if (source == PositionSource.LIVE) null else "old position"
+                ?: return if (source == PositionSource.LIVE) null else "old location"
             if (age < 20) return null
-            return if (age < 120) "position ${age}m old" else "position ${age / 60}h old"
+            return "location ${ageText(age)} old"
         }
+
+    /**
+     * Where this position came from, for Diagnostics: the answer to "is it
+     * actually updating my location?" without a debugger. A tile stuck at a
+     * place you left reads here as "this app's last saved location, 26h old",
+     * with coordinates rounded to about a kilometre so the place is recognisable.
+     */
+    val describe: String
+        get() = buildString {
+            append(
+                when (source) {
+                    PositionSource.FIXED -> "pinned place"
+                    PositionSource.LIVE -> "live fix"
+                    PositionSource.LAST_KNOWN -> "the phone's last known location"
+                    PositionSource.CACHED -> "this app's last saved location"
+                }
+            )
+            val age = ageMinutes
+            if (source != PositionSource.FIXED && age != null && age >= 1) {
+                append(", ${ageText(age)} old")
+            }
+            append(" (%.2f, %.2f)".format(Locale.US, lat, lon))
+        }
+}
+
+/** "45m", "26h", "3d": minutes until two hours, hours until two days. */
+internal fun ageText(minutes: Long): String = when {
+    minutes < 120 -> "${minutes}m"
+    minutes < 48 * 60 -> "${minutes / 60}h"
+    else -> "${minutes / (24 * 60)}d"
+}
+
+/**
+ * Whether a fresh fix is far enough from the last saved one that both tiles
+ * are describing somewhere you no longer are. Two nautical miles clears GPS
+ * jitter at home by a wide margin and is well inside the spacing of reporting
+ * stations, so a real move always counts and standing still never does. With
+ * nothing saved yet, any fix is news.
+ */
+internal fun movedFar(from: CachedPosition?, toLat: Double, toLon: Double): Boolean {
+    if (from == null) return true
+    return RouteMath.nmBetween(from.lat, from.lon, toLat, toLon) >= 2.0
 }
 
 object LocationSource {
@@ -47,6 +91,23 @@ object LocationSource {
     fun hasPermission(context: Context): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
+
+    /**
+     * Whether the position is available to work that runs with the app closed,
+     * which is every refresh the widgets do, the refresh buttons included.
+     *
+     * "While using the app" is foreground-only. In the background Android
+     * withholds both the live fix and the phone's last known location, so every
+     * tier but this app's own saved fix comes back empty, and the tiles stay
+     * wherever the app was last open. That is not a failure anything reports:
+     * the refresh succeeds, against the wrong place. Before Android 10 a
+     * foreground grant covered the background too.
+     */
+    fun hasBackgroundPermission(context: Context): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
 
     /**
      * Whether the app can produce a position at all. A pinned place counts, and

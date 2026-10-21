@@ -3,7 +3,6 @@ package com.connor.nearestplane
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -46,6 +45,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.glance.appwidget.updateAll
+import androidx.lifecycle.lifecycleScope
 import com.connor.nearestplane.wx.AviationWeatherClient
 import com.connor.nearestplane.wx.WeatherWidget
 import com.connor.nearestplane.wx.WxRefreshWorker
@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
     // up when the user comes back. Remembered state never would.
     private var granted by mutableStateOf(false)
     private var optimized by mutableStateOf(false)
+    private var background by mutableStateOf(false)
 
     override fun onResume() {
         super.onResume()
@@ -70,6 +71,35 @@ class MainActivity : ComponentActivity() {
         // dropped the periodic jobs, this puts them back.
         RefreshWorker.schedulePeriodic(this)
         WxRefreshWorker.schedulePeriodic(this)
+        catchUpToWhereYouAre()
+    }
+
+    /**
+     * The one moment the app is certain to be given your location: now, while
+     * it is open. Every widget refresh runs in the background, where Android
+     * withholds location unless it is set to "Allow all the time" — so without
+     * this, a tile followed you only as far as wherever the app was last
+     * opened, and opening it again did not move it either.
+     *
+     * Asking costs one location request. Refreshing costs a fetch per tile, so
+     * that only happens when you have actually moved.
+     */
+    private fun catchUpToWhereYouAre() {
+        if (!LocationSource.hasPermission(this)) return
+        lifecycleScope.launch {
+            val context = this@MainActivity
+            // A pin is a choice to stay put, not a position to correct.
+            if (AppSettings.fixedLocation(context) != null) return@launch
+            val before = AppSettings.lastPosition(context)
+            val now = LocationSource.deviceFix(context) ?: return@launch
+            // Our own saved fix is what we'd be comparing against; it tells
+            // us nothing new about where you are.
+            if (now.source == PositionSource.CACHED) return@launch
+            if (movedFar(before, now.lat, now.lon)) {
+                RefreshWorker.refreshNow(context)
+                WxRefreshWorker.refreshNow(context)
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -83,6 +113,7 @@ class MainActivity : ComponentActivity() {
     private fun readSystemState() {
         granted = LocationSource.hasPermission(this)
         optimized = Diagnostics.isBatteryOptimized(this)
+        background = LocationSource.hasBackgroundPermission(this)
     }
 
     @OptIn(ExperimentalLayoutApi::class)
@@ -235,19 +266,32 @@ class MainActivity : ComponentActivity() {
                     HorizontalDivider()
 
                     if (mode == LocationMode.DEVICE) {
-                        if (granted) {
-                            Text("Location access is on.")
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                Text(
-                                    "For the widgets to keep updating with the screen off, set " +
-                                        "location to \"Allow all the time\" in app settings. " +
-                                        "Android won't let an app request that from a dialog.",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                                OutlinedButton(onClick = { openAppSettings() }) {
-                                    Text("Open app settings")
-                                }
+                        if (granted && background) {
+                            Text("Location is allowed all the time. The widgets follow you.")
+                        } else if (granted) {
+                            // Checked, not assumed. This used to give the same
+                            // advice whether or not it had been taken, so there
+                            // was no way to tell which state you were in.
+                            Text(
+                                "Location is allowed only while the app is open.",
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                "The widgets refresh with the app closed, and Android won't " +
+                                    "tell them where you are then. They stay wherever the app " +
+                                    "was last open, and the refresh buttons can't move them " +
+                                    "either. Set location to \"Allow all the time\" in app " +
+                                    "settings; Android won't let an app ask for that from a dialog.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            OutlinedButton(onClick = { openAppSettings() }) {
+                                Text("Open app settings")
                             }
+                            Text(
+                                "Until then, opening this screen catches the widgets up to " +
+                                    "where you are.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         } else {
                             Text("This mode needs location access.")
                             Button(onClick = {
@@ -591,6 +635,12 @@ class MainActivity : ComponentActivity() {
                             "last success ${Diagnostics.timeAgo(planeDiag.lastOk)}",
                         style = MaterialTheme.typography.bodySmall
                     )
+                    if (planeDiag.lastPosition.isNotBlank()) {
+                        Text(
+                            "Planes used: ${planeDiag.lastPosition}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                     if (planeDiag.lastError.isNotBlank()) {
                         Text(
                             "Planes error at ${Diagnostics.clockTime(planeDiag.lastErrorAt)}: " +
@@ -604,6 +654,12 @@ class MainActivity : ComponentActivity() {
                             "last success ${Diagnostics.timeAgo(wxDiag.lastOk)}",
                         style = MaterialTheme.typography.bodySmall
                     )
+                    if (wxDiag.lastPosition.isNotBlank()) {
+                        Text(
+                            "Weather used: ${wxDiag.lastPosition}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                     if (wxDiag.lastError.isNotBlank()) {
                         Text(
                             "Weather error at ${Diagnostics.clockTime(wxDiag.lastErrorAt)}: " +
@@ -615,6 +671,12 @@ class MainActivity : ComponentActivity() {
                     Text(
                         "If \"last run\" is hours old, the system isn't running the job at all " +
                             "— that's battery optimisation, not a bug in the fetch.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        "If \"used\" says this app's last saved location and it's hours old, " +
+                            "the refreshes are running but Android isn't giving them your " +
+                            "location — see Location above.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }

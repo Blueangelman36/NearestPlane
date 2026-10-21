@@ -1,0 +1,33 @@
+{
+  "id": "b75e7703",
+  "reason": "Not a stray location request. Every widget refresh runs in the background, where Android withholds location unless it is set to 'Allow all the time'; with 'while using the app' the refreshes kept succeeding against the last saved position, and on a real trip the METAR tile stayed on DCA for a day after the phone reached Laconia, NH. Opening the app is the one moment the position is always given, so this catches both tiles up when you have moved. Remove it and a tile follows you only as far as wherever the app was last opened.",
+  "source": null,
+  "author": "Blueangelman36",
+  "created": "2026-10-21",
+  "snippet": "catchUpToWhereYouAre()",
+  "anchors": {
+    "5": {
+      "version": 5,
+      "path": "app/src/main/java/com/connor/nearestplane/MainActivity.kt",
+      "scope": "MainActivity.onResume",
+      "kind": "call_expression",
+      "line": 74,
+      "exact": "f0ec6deeb054a1cb",
+      "shape": "8c29656bf41d0ac2",
+      "dupes": {
+        "exact": 1,
+        "shape": 2,
+        "other_exact": 0,
+        "other_shape": 24,
+        "far_exact": 0,
+        "far_shape": 21
+      },
+      "rival": 0.42857142857142855,
+      "tokens": [
+        "catchUpToWhereYouAre",
+        "(",
+        ")"
+      ]
+    }
+  }
+}

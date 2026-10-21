@@ -53,6 +53,7 @@ class RefreshWorker(
             // phone with location off is a job that never finishes trying.
             return if (runAttemptCount < 3) Result.retry() else Result.success()
         }
+        Diagnostics.notePosition(context, "plane", fix.describe)
 
         val filter = AppSettings.planeFilter(context)
 
@@ -89,6 +90,7 @@ class RefreshWorker(
                 it[WidgetState.DETAIL] = ""
                 it[WidgetState.EMERGENCY] = ""
                 it[WidgetState.STALE_NOTE] = fix.staleNote.orEmpty()
+                it[WidgetState.PINNED] = fix.source == PositionSource.FIXED
                 it[WidgetState.UPDATED_AT] = System.currentTimeMillis()
             }
             Diagnostics.noteOk(context, "plane")
@@ -112,6 +114,7 @@ class RefreshWorker(
             // An old position is worth saying out loud: the distance and bearing
             // are measured from it, and nothing else on the tile hints at that.
             p[WidgetState.STALE_NOTE] = fix.staleNote.orEmpty()
+            p[WidgetState.PINNED] = fix.source == PositionSource.FIXED
             p[WidgetState.UPDATED_AT] = System.currentTimeMillis()
         }
         Diagnostics.noteOk(context, "plane")

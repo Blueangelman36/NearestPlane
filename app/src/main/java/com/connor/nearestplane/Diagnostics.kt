@@ -28,6 +28,7 @@ object Diagnostics {
     private fun lastOk(w: String) = longPreferencesKey("${w}_last_ok")
     private fun lastError(w: String) = stringPreferencesKey("${w}_last_error")
     private fun lastErrorAt(w: String) = longPreferencesKey("${w}_last_error_at")
+    private fun lastPosition(w: String) = stringPreferencesKey("${w}_last_position")
 
     suspend fun noteRun(context: Context, worker: String) {
         runCatching {
@@ -44,6 +45,17 @@ object Diagnostics {
         }
     }
 
+    /**
+     * Where the last refresh took you to be. A refresh against the wrong place
+     * succeeds like any other, so last-run and last-success can't show it; this
+     * is the only line that can.
+     */
+    suspend fun notePosition(context: Context, worker: String, description: String) {
+        runCatching {
+            context.diagStore.edit { it[lastPosition(worker)] = description }
+        }
+    }
+
     suspend fun noteError(context: Context, worker: String, message: String) {
         runCatching {
             context.diagStore.edit {
@@ -57,7 +69,8 @@ object Diagnostics {
         val lastRun: Long,
         val lastOk: Long,
         val lastError: String,
-        val lastErrorAt: Long
+        val lastErrorAt: Long,
+        val lastPosition: String = ""
     )
 
     fun report(context: Context, worker: String): Flow<Report> =
@@ -66,7 +79,8 @@ object Diagnostics {
                 lastRun = p[lastRun(worker)] ?: 0L,
                 lastOk = p[lastOk(worker)] ?: 0L,
                 lastError = p[lastError(worker)].orEmpty(),
-                lastErrorAt = p[lastErrorAt(worker)] ?: 0L
+                lastErrorAt = p[lastErrorAt(worker)] ?: 0L,
+                lastPosition = p[lastPosition(worker)].orEmpty()
             )
         }
 

@@ -1,5 +1,6 @@
 package com.connor.nearestplane
 
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 
@@ -19,4 +20,7 @@ object WidgetState {
     val STATUS = stringPreferencesKey("status")          // ok | empty | no_permission | error
     val UPDATED_AT = longPreferencesKey("updated_at")
     val STALE_NOTE = stringPreferencesKey("stale_note")  // set when a refresh failed
+    // A pinned place never goes stale, so it never earns a note — which made a
+    // forgotten pin look exactly like a tile that had stopped following you.
+    val PINNED = booleanPreferencesKey("pinned")
 }

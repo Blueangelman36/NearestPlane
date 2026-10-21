@@ -44,7 +44,7 @@ To cut a release:
    APK attaches itself a few minutes later. Or from a terminal:
 
    ```
-   git tag v1.11 && git push origin v1.11
+   git tag v1.13 && git push origin v1.13
    ```
 
 CI refuses a release whose tag doesn't match `versionName`: an APK built from a
@@ -364,12 +364,22 @@ to open one, you want current data — and both refresh the tile behind them.
 
 **Location** — `FusedLocationProvider` at balanced-power priority, accepting a
 fix up to 10 minutes old, falling back to last known position. Each tier reports
-its own age, and a tile working from anything older than 20 minutes says so in
-the corner: `position 40m old`. The distance and bearing on a tile are measured
+its own age, and a tile working from anything older than 20 minutes says so:
+`location 26h old`, on a line of its own on the METAR tile and first on the
+plane tile's bottom line. The distance and bearing on a tile are measured
 *from you*, so a stale position makes a live-looking tile quietly wrong about
 the one thing nothing else on it hints at. A widget refreshing
 every 15 minutes doesn't need a GPS lock, and city-block accuracy is plenty when
 the nearest plane is miles away.
+
+Every widget refresh runs in the background, the refresh buttons included, and
+Android only gives background work your location when it's set to **Allow all
+the time**. With *while using the app*, each refresh still succeeds — against
+the last position the app saved, wherever it was last open. Nothing fails, so
+nothing reported it; v1.13 checks the setting and says which one you're on in
+the Location card. Opening the app also catches both tiles up to where you are,
+whatever the setting, because that's the one moment Android always answers.
+Diagnostics shows the position each refresh used, and where it came from.
 
 **Refresh** — two independent paths, deliberately. WorkManager periodic jobs at
 15 minutes (planes) and 30 (weather); 15 is the platform's hard floor and asking
@@ -552,9 +562,19 @@ from a different UID, so a non-exported receiver is invisible to it.
 **Widget stuck on "Tap to find a plane"** — WorkManager was never scheduled.
 Open the app once; `MainActivity` schedules both workers on launch.
 
-**"No location set" after granting** — you granted foreground only, and the app
-is in device mode. See step 6, or switch to a fixed place, which needs no
-background permission at all.
+**A tile stays at a place you've left** — a METAR tile still on DCA a day after
+you drove to New Hampshire, say. Open the app: that alone moves both tiles to
+where you are. Then look at the **Location** card. If it says location is
+allowed *only while the app is open*, that's the cause: refreshes run in the
+background, Android withholds your location there, and the app falls back to
+the last position it saved. Set it to **Allow all the time**. **Diagnostics**
+confirms it — "Weather used: this app's last saved location, 26h old" — and the
+tile itself says `location 26h old`. If the Location card says **A fixed place**
+instead, the tile is pinned and is doing what it was told; tiles say `pinned`
+when they are.
+
+**"No location set"** — device mode with no location permission at all, or
+fixed mode with nothing pinned. See step 6.
 
 **The widget's refresh button says "offline", but refreshing in the app works**
 — fixed in v1.12; update from the app's **Version** card. Diagnostics showed

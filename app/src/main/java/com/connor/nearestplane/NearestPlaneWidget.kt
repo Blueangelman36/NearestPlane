@@ -162,13 +162,17 @@ class NearestPlaneWidget : GlanceAppWidget() {
         // Line 3: full type name.
         Line(prefs[WidgetState.TYPE_NAME].orEmpty(), 15, look, FontWeight.Medium, maxLines = 1)
 
-        // Line 4: distance, altitude, speed and age, all on one row.
+        // Line 4: any note first, then distance, altitude, speed and age. The
+        // note used to come last, and a line this long is cut from the end — so
+        // "location 26h old" was the part nobody saw, on the tile whose distance
+        // and bearing are measured from that very location.
+        val note = prefs[WidgetState.STALE_NOTE].orEmpty()
         val tail = listOf(
+            note,
+            if (prefs[WidgetState.PINNED] == true) "pinned" else "",
             prefs[WidgetState.POSITION].orEmpty(),
             prefs[WidgetState.DETAIL].orEmpty(),
-            prefs[WidgetState.STALE_NOTE].orEmpty().ifBlank {
-                ageLabel(prefs[WidgetState.UPDATED_AT] ?: 0L)
-            }
+            if (note.isBlank()) ageLabel(prefs[WidgetState.UPDATED_AT] ?: 0L) else ""
         ).filter { it.isNotBlank() }.joinToString(" · ")
         Line(tail, 14, look, muted = true, maxLines = 1)
     }
