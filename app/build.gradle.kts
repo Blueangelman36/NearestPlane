@@ -99,7 +99,7 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.12.0")
 
     // App-wide settings shared between the app and both widgets
-    implementation("androidx.datastore:datastore-preferences:1.2.1")
+    implementation("androidx.datastore:datastore-preferences:1.3.0")
 
     // GPS
     implementation("com.google.android.gms:play-services-location:21.4.0")
