@@ -108,7 +108,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v7
-      - uses: Blueangelman36/chesterton@a5842f13016ae1fc0790442872fa3bd97f4196df # v0.1.0
+      - uses: Blueangelman36/chesterton@ee667eb20d4009f3574c849f037804351ffd27b3 # v0.1.1
         with:
           implementation: rust
           comment-on-pr: true
